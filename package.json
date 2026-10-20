@@ -1,0 +1,60 @@
+{
+  "name": "monolith",
+  "productName": "Monolith",
+  "version": "1.0.0",
+  "description": "A Windows focus overlay that keeps you on exactly one task until it is finished.",
+  "author": "16JoeTheCoder",
+  "license": "MIT",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "icon": "node scripts/make-icon.mjs",
+    "package:win": "npm run build && electron-builder --win --publish never",
+    "package:win:dir": "npm run build && electron-builder --win --dir --publish never"
+  },
+  "build": {
+    "appId": "com.monolith.app",
+    "productName": "Monolith",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Monolith-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Monolith-Portable-${version}.${ext}"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.10",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}
