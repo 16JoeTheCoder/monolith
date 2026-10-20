@@ -26,7 +26,7 @@ function boot(now: number): Controller {
 function runningTask(): Controller {
   const c = boot(T0);
   const pomo = { mode: 'stopwatch' as const, countdown: { durationMs: 25 * MIN, onExpire: 'stop' as const }, pomodoro: c.data.settings.defaultTimer.pomodoro };
-  expect(c.command({ type: 'addTask', input: { name: 'Write report', finishCondition: 'Report sent to the client', value: 12.5, timer: pomo } }, T0).ok).toBe(true);
+  expect(c.command({ type: 'addTask', input: { name: 'Write report', finishCondition: 'Report sent to the client', estimateMs: 12 * MIN, timer: pomo } }, T0).ok).toBe(true);
   expect(c.command({ type: 'timer', action: 'start' }, T0).ok).toBe(true);
   return c;
 }
@@ -37,7 +37,7 @@ describe('persistence', () => {
     c.setWindowPos({ x: 40, y: 50 });
     const again = boot(T0 + 2 * SEC);
     expect(again.data.tasks).toHaveLength(1);
-    expect(again.data.tasks[0].value).toBe(12.5);
+    expect(again.data.tasks[0].estimateMs).toBe(12 * MIN);
     expect(again.data.windowPos).toEqual({ x: 40, y: 50 });
     expect(again.pendingGap).toBeNull();
     expect(activeTask(again.data)?.runtime.status).toBe('running'); // small gap: seamless

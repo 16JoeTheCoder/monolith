@@ -1,8 +1,8 @@
 // Validation rules used by both the renderer (inline errors) and main (the
 // authority; every IPC input is re-checked there). Pure, no Electron imports.
 
-import { CURRENCIES } from './types';
-import type { Draft, NewTaskInput, Priority, TaskEdit } from './types';
+import { THEMES } from './types';
+import type { Draft, Grade, NewTaskInput, Priority, TaskEdit } from './types';
 
 export const FINISH_PHRASE = 'I have finished this task';
 const SEC = 1000;
@@ -23,6 +23,18 @@ export function isFinishPhrase(s: unknown): boolean {
 export function isDropReason(s: unknown): boolean {
   return typeof s === 'string' && s.trim().length >= 3;
 }
+
+export function isGrade(g: unknown): g is Grade {
+  return g === 'fully' || g === 'mostly' || g === 'barely';
+}
+
+/** Compact card typography ranges [min, max] in px. Values outside are clamped, not rejected. */
+export const APPEARANCE_LIMITS = {
+  statusPx: [9, 16],
+  titlePx: [12, 28],
+  digitsPx: [24, 64],
+  barPx: [2, 12],
+} as const;
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -62,11 +74,7 @@ export function validateTaskFields(t: Partial<TaskEdit> | NewTaskInput): Errors 
   const name = isStr(t.name) ? t.name.trim() : '';
   if (name.length < 1 || name.length > 120) e.name = 'Name must be 1-120 characters.';
   if (!isStr(t.finishCondition) || t.finishCondition.trim().length < 8) e.finishCondition = 'Describe what finished looks like (at least 8 characters).';
-  if (t.notes !== undefined && (!isStr(t.notes) || t.notes.length > 2000)) e.notes = 'Notes can be at most 2000 characters.';
   if (t.priority !== undefined && !PRIORITIES.includes(t.priority)) e.priority = 'Invalid priority.';
-  if (t.value !== undefined && (!isNum(t.value) || t.value < 0)) e.value = 'Value must be a number of 0 or more.';
-  if (t.valueIsEarned !== undefined && !isBool(t.valueIsEarned)) e.valueIsEarned = 'Invalid flag.';
-  if (t.deadline !== undefined && t.deadline !== null && (!isStr(t.deadline) || Number.isNaN(Date.parse(t.deadline)))) e.deadline = 'Invalid deadline.';
   if (t.estimateMs !== undefined && t.estimateMs !== null && (!isNum(t.estimateMs) || t.estimateMs <= 0 || t.estimateMs > 1000 * HOUR)) e.estimateMs = 'Estimate must be positive.';
   if (t.timer !== undefined) Object.assign(e, validateTimer(t.timer));
   return e;
@@ -87,9 +95,12 @@ export function validateSettings(s: unknown): Errors {
   const e: Errors = {};
   if (!isObj(s)) return { settings: 'Invalid settings.' };
   Object.assign(e, validateTimer(s.defaultTimer, 'defaultTimer'));
-  if (!inRange(s.idleOpacity, 0.5, 0.8)) e.idleOpacity = 'Opacity must be 50-80%.';
-  if (!CURRENCIES.includes(s.currency as never)) e.currency = 'Unknown currency.';
-  for (const k of ['soundEnabled', 'notificationsEnabled', 'launchAtStartup', 'shortcutsEnabled', 'showMoneyInCompact']) {
+  if (!inRange(s.idleOpacity, 0, 1)) e.idleOpacity = 'Opacity must be 0-100%.';
+  if (!THEMES.includes(s.theme as never)) e.theme = 'Unknown theme.';
+  if (s.accent !== null && !(isStr(s.accent) && /^#[0-9a-f]{6}$/i.test(s.accent))) e.accent = 'Pick a colour.';
+  const a = s.appearance;
+  if (!isObj(a) || !Object.keys(APPEARANCE_LIMITS).every((k) => isNum(a[k]))) e.appearance = 'Sizes must be numbers.';
+  for (const k of ['soundEnabled', 'notificationsEnabled', 'launchAtStartup', 'shortcutsEnabled', 'onboarded']) {
     if (!isBool(s[k])) e[k] = 'Invalid flag.';
   }
   const sc = s.shortcuts;

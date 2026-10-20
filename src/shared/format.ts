@@ -32,12 +32,17 @@ export function formatDate(epoch: number): string {
   return new Date(epoch).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-export function formatMoney(value: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(value);
-  } catch {
-    return `${currency} ${value.toFixed(2)}`;
-  }
+/** Local calendar day key, 'YYYY-MM-DD'. */
+export function dayKey(epoch: number): string {
+  const d = new Date(epoch);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Local midnight `n` days after the day containing `epoch` (DST-safe). */
+export function addDays(epoch: number, n: number): number {
+  const d = new Date(startOfDay(epoch));
+  d.setDate(d.getDate() + n);
+  return d.getTime();
 }
 
 export function startOfDay(now: number): number {

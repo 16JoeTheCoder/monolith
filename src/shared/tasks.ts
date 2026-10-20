@@ -4,11 +4,14 @@
 // one and only active task, everything else not completed is queued.
 
 import { advance, closeSlice, idleRuntime, pause, reset, skipPhase, start } from './timer';
-import { isDropReason, isFinishPhrase, validateSettings, validateTaskFields } from './validation';
-import { startOfDay, startOfWeek } from './format';
-import type { AppData, AppEvent, Draft, NewTaskInput, Settings, Task, TimerConfig, TimerEvent } from './types';
+import { APPEARANCE_LIMITS, isDropReason, isFinishPhrase, isGrade, validateSettings, validateTaskFields } from './validation';
+import { bumpDay } from './record';
+import type { AppData, AppEvent, Appearance, Draft, DropKind, Grade, NewTaskInput, Settings, Task, TimerConfig, TimerEvent } from './types';
 
 export const MAX_EVENTS = 2000;
+export const MAX_JOURNAL = 500;
+/** A finish counts toward the chain only with at least this much tracked work. */
+export const CHAIN_MIN_MS = 10 * 60_000;
 const MIN = 60_000;
 
 export type Mutation =
@@ -26,29 +29,46 @@ export function defaultTimer(): TimerConfig {
   };
 }
 
+export function defaultAppearance(): Appearance {
+  return { statusPx: 11, titlePx: 17, digitsPx: 34, barPx: 3 };
+}
+
 export function defaultSettings(): Settings {
   return {
     defaultTimer: defaultTimer(),
     idleOpacity: 0.65,
-    currency: 'IDR',
     soundEnabled: true,
     notificationsEnabled: true,
     launchAtStartup: false,
     shortcutsEnabled: true,
     shortcuts: { togglePanel: 'Ctrl+Alt+Space', startPause: 'Ctrl+Alt+P' },
-    showMoneyInCompact: false,
+    appearance: defaultAppearance(),
+    theme: 'graphite',
+    accent: null,
+    onboarded: false,
   };
 }
 
 export function emptyData(): AppData {
-  return { version: 1, tasks: [], settings: defaultSettings(), windowPos: null, events: [] };
+  return {
+    version: 2,
+    tasks: [],
+    settings: defaultSettings(),
+    windowPos: null,
+    events: [],
+    days: {},
+    journal: [],
+    bests: { longestStretchMs: 0 },
+    chain: { current: 0, best: 0 },
+    orphanedDeletedMs: 0,
+  };
 }
 
-export function activeTask(data: AppData): Task | null {
+export function activeTask(data: Pick<AppData, 'tasks'>): Task | null {
   return data.tasks.find((t) => t.status === 'active') ?? null;
 }
 
-export function queuedTasks(data: AppData): Task[] {
+export function queuedTasks(data: Pick<AppData, 'tasks'>): Task[] {
   return data.tasks.filter((t) => t.status === 'queued');
 }
 
@@ -66,6 +86,18 @@ export function needsDeleteConfirm(task: Task, now: number): boolean {
   return trackedMs(task, now) > 0;
 }
 
+const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, Number.isFinite(v) ? v : min));
+
+export function clampAppearance(a: Appearance): Appearance {
+  const L = APPEARANCE_LIMITS;
+  return {
+    statusPx: clamp(a.statusPx, L.statusPx[0], L.statusPx[1]),
+    titlePx: clamp(a.titlePx, L.titlePx[0], L.titlePx[1]),
+    digitsPx: clamp(a.digitsPx, L.digitsPx[0], L.digitsPx[1]),
+    barPx: clamp(a.barPx, L.barPx[0], L.barPx[1]),
+  };
+}
+
 /** Restore the invariant. Any non-active task left running is stopped at `now`. */
 export function normalize(data: AppData, now: number): AppData {
   let seenActive = false;
@@ -74,14 +106,16 @@ export function normalize(data: AppData, now: number): AppData {
     const status: Task['status'] = seenActive ? 'queued' : 'active';
     seenActive = true;
     let task = t.status === status ? t : { ...t, status };
+    if (status === 'active' && t.status !== 'active') task = { ...task, activatedAt: now };
     if (status === 'queued' && task.runtime.status === 'running') {
       task = closeSlice(task, now);
       task = { ...task, runtime: { ...task.runtime, status: 'paused' } };
     }
     return task;
   });
-  const settings = { ...data.settings, idleOpacity: Math.min(0.8, Math.max(0.5, data.settings.idleOpacity)) };
-  return { ...data, tasks, settings, events: data.events.slice(-MAX_EVENTS) };
+  const s = data.settings;
+  const settings = { ...s, idleOpacity: clamp(s.idleOpacity, 0, 1), appearance: clampAppearance(s.appearance) };
+  return { ...data, tasks, settings, events: data.events.slice(-MAX_EVENTS), journal: data.journal.slice(-MAX_JOURNAL) };
 }
 
 function withEvent(data: AppData, ev: AppEvent): AppData {
@@ -96,12 +130,8 @@ export function createTask(input: NewTaskInput, settings: Settings, now: number,
   return {
     id,
     name: input.name.trim(),
-    notes: input.notes ?? '',
     finishCondition: input.finishCondition.trim(),
     priority: input.priority ?? 'none',
-    value: input.value ?? 0,
-    valueIsEarned: input.valueIsEarned ?? false,
-    deadline: input.deadline ?? null,
     estimateMs: input.estimateMs ?? null,
     status: 'queued',
     timer: structuredClone(input.timer ?? settings.defaultTimer),
@@ -111,9 +141,12 @@ export function createTask(input: NewTaskInput, settings: Settings, now: number,
     pomodorosCompleted: 0,
     sessions: [],
     createdAt: now,
+    activatedAt: null,
     startedAt: null,
+    startLatencyMs: null,
     completedAt: null,
     droppedCount: 0,
+    lostFocusDrops: 0,
   };
 }
 
@@ -123,11 +156,13 @@ export function addTask(data: AppData, input: NewTaskInput, now: number, id: str
   return ok(normalize({ ...data, tasks: [...data.tasks, createTask(input, data.settings, now, id)] }, now));
 }
 
+/** Deleting unfinished work does not erase it from the record: its work time becomes orphaned. */
 export function deleteTask(data: AppData, taskId: string, confirmed: boolean, now: number): Mutation {
   const task = data.tasks.find((t) => t.id === taskId);
   if (!task) return fail('Task not found.');
   if (needsDeleteConfirm(task, now) && !confirmed) return fail('confirm-required');
-  return ok(normalize({ ...data, tasks: data.tasks.filter((t) => t.id !== taskId) }, now));
+  const orphaned = task.status !== 'completed' ? task.workMs : 0;
+  return ok(normalize({ ...data, tasks: data.tasks.filter((t) => t.id !== taskId), orphanedDeletedMs: data.orphanedDeletedMs + orphaned }, now));
 }
 
 /** Reorder queued tasks only; the active task always stays first. */
@@ -152,14 +187,17 @@ export function timerCommand(data: AppData, action: 'start' | 'pause' | 'reset' 
     let next = start(advance(task, now).task, now);
     let d = data;
     if (next.startedAt === null) {
-      next = { ...next, startedAt: now };
-      d = withEvent(d, { type: 'started', taskId: task.id, at: now });
+      next = { ...next, startedAt: now, startLatencyMs: Math.max(0, now - (task.activatedAt ?? task.createdAt)) };
+      d = withEvent({ ...d, days: bumpDay(d.days, now, 'started') }, { type: 'started', taskId: task.id, at: now });
     }
     return ok(replaceTask(d, next));
   }
   if (action === 'pause') {
     const res = pause(task, now);
-    return ok(replaceTask(data, res.task), res.events);
+    // Only a slice the user actually cut short counts as a pause.
+    const userPaused = task.runtime.status === 'running' && res.task.runtime.status === 'paused';
+    const d = userPaused ? { ...data, days: bumpDay(data.days, now, 'pauses') } : data;
+    return ok(replaceTask(d, res.task), res.events);
   }
   if (action === 'reset') return ok(replaceTask(data, reset(task, now)));
   if (task.timer.mode !== 'pomodoro') return fail('Skip is only available in Pomodoro mode.');
@@ -167,30 +205,65 @@ export function timerCommand(data: AppData, action: 'start' | 'pause' | 'reset' 
   return ok(replaceTask(data, res.task), res.events);
 }
 
-/** Stop the timer (keeping totals), then finish. Requires the exact phrase. */
-export function completeTask(data: AppData, taskId: string, phrase: string, now: number): Mutation {
+/** Stop the timer (keeping totals), then finish. Requires the exact phrase and a self-grade. */
+export function completeTask(data: AppData, taskId: string, phrase: string, grade: Grade, now: number): Mutation {
   const task = activeTask(data);
   if (!task || task.id !== taskId) return fail('Only the task in focus can be finished.');
   if (!isFinishPhrase(phrase)) return fail('Type the phrase exactly: I have finished this task');
+  if (!isGrade(grade)) return fail('Choose how fully you finished.');
   const stopped = closeSlice(advance(task, now).task, now);
   const done: Task = { ...stopped, status: 'completed', completedAt: now, runtime: idleRuntime() };
+  const entry = {
+    at: now,
+    taskId,
+    trackedMs: done.workMs,
+    estimateMs: done.estimateMs,
+    startLatencyMs: done.startLatencyMs ?? 0,
+    grade,
+    clean: done.lostFocusDrops === 0,
+  };
+  const counts = done.workMs >= CHAIN_MIN_MS;
+  const current = counts ? data.chain.current + 1 : data.chain.current;
   // Move it out of the queue order so the next queued task becomes first.
   const rest = data.tasks.filter((t) => t.id !== taskId);
-  return ok(normalize(withEvent({ ...data, tasks: [...rest, done] }, { type: 'finished', taskId, at: now }), now));
+  const d: AppData = {
+    ...data,
+    tasks: [...rest, done],
+    days: bumpDay(data.days, now, 'finished'),
+    journal: [...data.journal, entry].slice(-MAX_JOURNAL),
+    chain: { current, best: Math.max(data.chain.best, current) },
+  };
+  return ok(normalize(withEvent(d, { type: 'finished', taskId, at: now }), now));
 }
 
-/** Escape hatch: stop, keep time, send to the back of the queue. */
-export function dropTask(data: AppData, taskId: string, reason: string, now: number): Mutation {
+/**
+ * Escape hatch: stop, keep time, send to the back of the queue.
+ * "Blocked" carries no penalty; "lost focus" orphans the task's time and resets the chain.
+ */
+export function dropTask(data: AppData, taskId: string, reason: string, kind: DropKind, now: number): Mutation {
   const task = activeTask(data);
   if (!task || task.id !== taskId) return fail('Only the task in focus can be dropped.');
   if (queuedTasks(data).length === 0) return fail('Nothing else is queued. Delete the task instead.');
   if (!isDropReason(reason)) return fail('Give a reason (at least 3 characters).');
+  if (kind !== 'blocked' && kind !== 'lostFocus') return fail('Choose why you are dropping it.');
+  const lost = kind === 'lostFocus';
   const stopped = closeSlice(advance(task, now).task, now);
-  const dropped: Task = { ...stopped, status: 'queued', droppedCount: task.droppedCount + 1, runtime: idleRuntime() };
+  const dropped: Task = {
+    ...stopped,
+    status: 'queued',
+    droppedCount: task.droppedCount + 1,
+    lostFocusDrops: task.lostFocusDrops + (lost ? 1 : 0),
+    runtime: idleRuntime(),
+  };
   const others = data.tasks.filter((t) => t.id !== taskId && t.status !== 'completed');
   const done = data.tasks.filter((t) => t.status === 'completed');
-  const d = withEvent({ ...data, tasks: [...others, dropped, ...done] }, { type: 'dropped', taskId, at: now, reason: reason.trim() });
-  return ok(normalize(d, now));
+  const d: AppData = {
+    ...data,
+    tasks: [...others, dropped, ...done],
+    days: bumpDay(data.days, now, 'dropped'),
+    chain: lost ? { ...data.chain, current: 0 } : data.chain,
+  };
+  return ok(normalize(withEvent(d, { type: 'dropped', taskId, at: now, reason: reason.trim(), kind }), now));
 }
 
 /** Completed -> front of the queue (or active if nothing is). Totals are kept. */
@@ -234,71 +307,17 @@ export function saveDraft(data: AppData, draft: Draft, now: number): Mutation {
       return {
         ...t,
         name: edit.name.trim(),
-        notes: edit.notes,
         finishCondition: isLocked(t) ? t.finishCondition : edit.finishCondition.trim(),
         priority: edit.priority,
-        value: edit.value,
-        valueIsEarned: edit.valueIsEarned,
-        deadline: edit.deadline,
         estimateMs: edit.estimateMs,
         timer: structuredClone(edit.timer),
         runtime: timerChanged ? idleRuntime() : t.runtime,
       };
     });
   }
-  return ok(normalize({ ...data, tasks, settings: draft.settings ? structuredClone(draft.settings) : data.settings }, now));
-}
-
-export interface Stats {
-  started: number;
-  finished: number;
-  dropped: number;
-  focusedToday: number;
-  focusedWeek: number;
-}
-
-function overlap(a0: number, a1: number, b0: number, b1: number): number {
-  return Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
-}
-
-/** Weekly counts and focused (work-only) time, including the live running slice. */
-export function computeStats(data: AppData, now: number): Stats {
-  const week = startOfWeek(now);
-  const day = startOfDay(now);
-  const inWeek = data.events.filter((e) => e.at >= week && e.at <= now);
-  let focusedToday = 0;
-  let focusedWeek = 0;
-  for (const t of data.tasks) {
-    const spans = t.sessions.filter((s) => s.kind === 'work').map((s) => [s.startedAt, s.endedAt]);
-    const rt = t.runtime;
-    const liveIsBreak = t.timer.mode === 'pomodoro' && rt.phase !== 'work';
-    if (rt.sliceStartedAt !== null && !liveIsBreak) spans.push([rt.sliceStartedAt, Math.max(rt.sliceStartedAt, now)]);
-    for (const [a, b] of spans) {
-      focusedToday += overlap(a, b, day, now);
-      focusedWeek += overlap(a, b, week, now);
-    }
-  }
-  return {
-    started: inWeek.filter((e) => e.type === 'started').length,
-    finished: inWeek.filter((e) => e.type === 'finished').length,
-    dropped: inWeek.filter((e) => e.type === 'dropped').length,
-    focusedToday,
-    focusedWeek,
-  };
-}
-
-export interface MoneyTotals {
-  value: number;
-  earned: number;
-  ratePerHour: number | null;
-}
-
-/** "est." rate: value of completed tasks that have both value and tracked work, per tracked hour. */
-export function moneyTotals(tasks: Task[]): MoneyTotals {
-  const done = tasks.filter((t) => t.status === 'completed');
-  const value = done.reduce((s, t) => s + t.value, 0);
-  const earned = done.filter((t) => t.valueIsEarned).reduce((s, t) => s + t.value, 0);
-  const rated = done.filter((t) => t.value > 0 && t.workMs > 0);
-  const hours = rated.reduce((s, t) => s + t.workMs, 0) / 3_600_000;
-  return { value, earned, ratePerHour: hours > 0 ? rated.reduce((s, t) => s + t.value, 0) / hours : null };
+  // Flags changed by immediate commands (welcome, tray startup toggle) are not the draft's to overwrite.
+  const settings = draft.settings
+    ? { ...structuredClone(draft.settings), onboarded: data.settings.onboarded, launchAtStartup: draft.settings.launchAtStartup }
+    : data.settings;
+  return ok(normalize({ ...data, tasks, settings }, now));
 }

@@ -9,6 +9,7 @@ import { phaseLabel } from '../shared/format';
 import type { Settings, Snapshot, TimerEvent } from '../shared/types';
 import { Controller } from './controller';
 import { registerIpc } from './ipc';
+import { describeError, initLog, log } from './log';
 import { registerShortcuts, unregisterShortcuts } from './shortcuts';
 import { Store } from './store';
 import { AppTray } from './tray';
@@ -19,6 +20,9 @@ const TICK_MS = 250;
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  initLog(app.getPath('userData'));
+  process.on('uncaughtException', (e) => log(`uncaughtException ${describeError(e)}`));
+  process.on('unhandledRejection', (e) => log(`unhandledRejection ${describeError(e)}`));
   app.setAppUserModelId('com.monolith.app');
   app.whenReady().then(boot);
 }
@@ -46,6 +50,7 @@ function boot(): void {
   // Block navigation and new windows: the renderer only ever shows our page.
   overlay.win.webContents.on('will-navigate', (e) => e.preventDefault());
   overlay.win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  overlay.win.webContents.on('render-process-gone', (_e, details) => log(`renderer gone: ${details.reason} (${details.exitCode})`));
   overlay.win.on('close', (e) => {
     if (!quitting) e.preventDefault();
   });
@@ -76,13 +81,12 @@ function boot(): void {
   function snapshot(): Snapshot {
     const d = controller.data;
     return {
-      tasks: d.tasks,
-      settings: d.settings,
-      events: d.events,
+      data: d,
       pendingGap: controller.pendingGap,
       expanded: overlay.expanded,
       shortcutError,
       isPackaged: app.isPackaged,
+      version: app.getVersion(),
     };
   }
 
@@ -136,10 +140,16 @@ function boot(): void {
     command: (cmd) => controller.command(cmd, Date.now()),
     expand: () => expand(true),
     collapse,
-    reportHeight: (h) => overlay.setCompactHeight(h),
+    reportSize: (w, h) => overlay.setCompactSize(w, h),
     dragStart: () => overlay.dragStart(),
     dragEnd: () => overlay.dragEnd(),
     quit,
+    restart: (reason) => {
+      log(`renderer error, restarting: ${reason}`);
+      quitting = true;
+      app.relaunch();
+      app.exit(0);
+    },
   });
 
   applySettings(controller.data.settings);

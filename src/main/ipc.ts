@@ -4,7 +4,7 @@
 
 import { ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
 import { CHANNELS } from '../shared/api';
-import { validateDraft } from '../shared/validation';
+import { isGrade, validateDraft } from '../shared/validation';
 import type { Command, CommandResult, Draft, NewTaskInput, Settings, Snapshot, TaskEdit } from '../shared/types';
 
 export interface IpcDeps {
@@ -13,10 +13,11 @@ export interface IpcDeps {
   command(cmd: Command): CommandResult;
   expand(): void;
   collapse(): void;
-  reportHeight(h: number): void;
+  reportSize(width: number, height: number): void;
   dragStart(): void;
   dragEnd(): boolean;
   quit(): void;
+  restart(reason: string): void;
 }
 
 type Obj = Record<string, unknown>;
@@ -46,12 +47,8 @@ function pickTimer(v: unknown): TaskEdit['timer'] {
 function pickTaskFields(v: Obj): Omit<TaskEdit, 'id'> {
   return {
     name: str(v.name, 200),
-    notes: str(v.notes, 4000),
     finishCondition: str(v.finishCondition),
     priority: (v.priority ?? 'none') as TaskEdit['priority'],
-    value: (v.value ?? 0) as number,
-    valueIsEarned: (v.valueIsEarned ?? false) as boolean,
-    deadline: (v.deadline ?? null) as string | null,
     estimateMs: (v.estimateMs ?? null) as number | null,
     timer: pickTimer(v.timer),
   };
@@ -59,16 +56,24 @@ function pickTaskFields(v: Obj): Omit<TaskEdit, 'id'> {
 
 function pickSettings(v: Obj): Settings {
   const sc = isObj(v.shortcuts) ? v.shortcuts : {};
+  const a = isObj(v.appearance) ? v.appearance : {};
   return {
     defaultTimer: pickTimer(v.defaultTimer),
     idleOpacity: v.idleOpacity as number,
-    currency: v.currency as Settings['currency'],
     soundEnabled: v.soundEnabled as boolean,
     notificationsEnabled: v.notificationsEnabled as boolean,
     launchAtStartup: v.launchAtStartup as boolean,
     shortcutsEnabled: v.shortcutsEnabled as boolean,
     shortcuts: { togglePanel: str(sc.togglePanel, 60), startPause: str(sc.startPause, 60) },
-    showMoneyInCompact: v.showMoneyInCompact as boolean,
+    appearance: {
+      statusPx: a.statusPx as number,
+      titlePx: a.titlePx as number,
+      digitsPx: a.digitsPx as number,
+      barPx: a.barPx as number,
+    },
+    theme: v.theme as Settings['theme'],
+    accent: (v.accent ?? null) as string | null,
+    onboarded: v.onboarded as boolean,
   };
 }
 
@@ -88,9 +93,9 @@ export function parseCommand(raw: unknown): Command | null {
     case 'moveTask':
       return taskId && (raw.direction === 'up' || raw.direction === 'down') ? { type: 'moveTask', taskId, direction: raw.direction } : null;
     case 'completeTask':
-      return taskId ? { type: 'completeTask', taskId, phrase: str(raw.phrase, 200) } : null;
+      return taskId && isGrade(raw.grade) ? { type: 'completeTask', taskId, phrase: str(raw.phrase, 200), grade: raw.grade } : null;
     case 'dropTask':
-      return taskId ? { type: 'dropTask', taskId, reason: str(raw.reason, 500) } : null;
+      return taskId && (raw.kind === 'blocked' || raw.kind === 'lostFocus') ? { type: 'dropTask', taskId, reason: str(raw.reason, 500), kind: raw.kind } : null;
     case 'reopenTask':
       return taskId ? { type: 'reopenTask', taskId } : null;
     case 'timer':
@@ -99,6 +104,9 @@ export function parseCommand(raw: unknown): Command | null {
       return typeof raw.count === 'boolean' ? { type: 'answerGap', count: raw.count } : null;
     case 'setLaunchAtStartup':
       return typeof raw.enabled === 'boolean' ? { type: 'setLaunchAtStartup', enabled: raw.enabled } : null;
+    case 'dismissWelcome':
+    case 'resetAll':
+      return { type: raw.type };
     case 'saveDraft': {
       const d = raw.draft;
       if (!isObj(d) || !Array.isArray(d.tasks) || d.tasks.length > 1000) return null;
@@ -132,9 +140,10 @@ export function registerIpc(deps: IpcDeps): void {
   ipcMain.handle(CHANNELS.expand, guard(undefined, () => deps.expand()));
   ipcMain.handle(CHANNELS.collapse, guard(undefined, () => deps.collapse()));
   ipcMain.handle(CHANNELS.dragEnd, guard(false, () => deps.dragEnd()));
-  ipcMain.on(CHANNELS.reportHeight, guard<[unknown], void>(undefined, (h) => {
-    if (typeof h === 'number' && Number.isFinite(h)) deps.reportHeight(h);
+  ipcMain.on(CHANNELS.reportSize, guard<[unknown, unknown], void>(undefined, (w, h) => {
+    if (typeof w === 'number' && Number.isFinite(w) && typeof h === 'number' && Number.isFinite(h)) deps.reportSize(w, h);
   }));
   ipcMain.on(CHANNELS.dragStart, guard(undefined, () => deps.dragStart()));
   ipcMain.on(CHANNELS.quit, guard(undefined, () => deps.quit()));
+  ipcMain.on(CHANNELS.restart, guard<[unknown], void>(undefined, (reason) => deps.restart(str(reason, 2000))));
 }
