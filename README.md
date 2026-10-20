@@ -291,8 +291,6 @@ estimate.
   Main polls the cursor instead (see `window.ts`).
 - **React is a devDependency** because Vite bundles it into the renderer. The packaged app
   contains no `node_modules`.
-- **The original GitHub profile README was moved** to `docs/PROFILE-README.md` so this README
-  can describe Monolith.
 - **The heartbeat is written only while a timer runs**, as the spec requires, so an idle app
   causes no disk writes.
 
@@ -354,9 +352,8 @@ estimate.
 ## Exact commands on Windows
 
 ```powershell
-git clone https://github.com/16JoeTheCoder/16JoeTheCoder.git
-cd 16JoeTheCoder
-git checkout claude/loving-allen-k9gnvu
+git clone https://github.com/16JoeTheCoder/monolith.git
+cd monolith
 npm ci
 npm test
 npm run dev               # try it without installing
