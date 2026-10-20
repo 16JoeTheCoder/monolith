@@ -3,19 +3,20 @@
 // Writes are crash-safe: write .tmp, fsync, keep the previous file as .bak,
 // then rename .tmp over the real file (rename is atomic on NTFS and ext4).
 // A corrupt main file falls back to .bak, then to empty data.
+// A v1 file (Monolith 0.1) is copied once to state.v1.bak.json, then migrated.
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { defaultSettings, emptyData, normalize } from '../shared/tasks';
-import { CURRENCIES } from '../shared/types';
-import type { AppData, Settings } from '../shared/types';
-import { validateSettings } from '../shared/validation';
+import { coerceV2, migrateV1 } from '../shared/migrate';
+import { emptyData, normalize } from '../shared/tasks';
+import type { AppData } from '../shared/types';
 
 export class Store {
   readonly file: string;
   readonly bak: string;
   readonly tmp: string;
   readonly heartbeatFile: string;
+  readonly v1Backup: string;
 
   constructor(dir: string) {
     fs.mkdirSync(dir, { recursive: true });
@@ -23,11 +24,20 @@ export class Store {
     this.bak = `${this.file}.bak`;
     this.tmp = `${this.file}.tmp`;
     this.heartbeatFile = path.join(dir, 'heartbeat');
+    this.v1Backup = path.join(dir, 'state.v1.bak.json');
   }
 
   load(now: number): AppData {
     for (const f of [this.file, this.bak]) {
-      const data = readData(f);
+      const raw = readJson(f);
+      if (!raw) continue;
+      if (raw.version === 1 && Array.isArray(raw.tasks)) {
+        if (!fs.existsSync(this.v1Backup)) fs.copyFileSync(f, this.v1Backup);
+        const data = normalize(migrateV1(raw), now);
+        this.save(data);
+        return data;
+      }
+      const data = coerceV2(raw);
       if (data) return normalize(data, now);
     }
     return emptyData();
@@ -67,31 +77,11 @@ function writeDurable(file: string, text: string): void {
   }
 }
 
-/** Parse and lightly sanitise a data file. Returns null if it is unusable. */
-function readData(file: string): AppData | null {
+function readJson(file: string): Record<string, unknown> | null {
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (!raw || raw.version !== 1 || !Array.isArray(raw.tasks)) return null;
-    const settings = mergeSettings(raw.settings);
-    const pos = raw.windowPos;
-    return {
-      version: 1,
-      tasks: raw.tasks.filter((t: unknown) => t && typeof t === 'object' && typeof (t as { id?: unknown }).id === 'string'),
-      settings,
-      windowPos: pos && Number.isFinite(pos.x) && Number.isFinite(pos.y) ? { x: pos.x, y: pos.y } : null,
-      events: Array.isArray(raw.events) ? raw.events : [],
-    };
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
   } catch {
     return null;
   }
-}
-
-/** Fill missing settings from defaults; an invalid stored set falls back to defaults. */
-function mergeSettings(raw: unknown): Settings {
-  const d = defaultSettings();
-  if (!raw || typeof raw !== 'object') return d;
-  const r = raw as Partial<Settings>;
-  const merged: Settings = { ...d, ...r, shortcuts: { ...d.shortcuts, ...r.shortcuts }, defaultTimer: r.defaultTimer ?? d.defaultTimer };
-  if (!CURRENCIES.includes(merged.currency)) merged.currency = d.currency;
-  return Object.keys(validateSettings(merged)).length ? d : merged;
 }

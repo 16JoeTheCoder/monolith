@@ -33,11 +33,12 @@ export function Panel({ snap, onCollapse, closeRequest }: PanelProps) {
   const drag = useDragClick();
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const firstCloseRequest = useRef(closeRequest);
+  const { tasks, settings } = snap.data;
 
   // Rebase the draft whenever the snapshot changes underneath it.
-  useEffect(() => setDraft((d) => rebase(d, snap.tasks, snap.settings)), [snap.tasks, snap.settings]);
+  useEffect(() => setDraft((d) => rebase(d, tasks, settings)), [tasks, settings]);
 
-  const dirty = isDirty(draft, snap.tasks, snap.settings);
+  const dirty = isDirty(draft, tasks, settings);
 
   const requestClose = () => (dirty ? setConfirmClose(true) : onCollapse());
 
@@ -47,7 +48,7 @@ export function Panel({ snap, onCollapse, closeRequest }: PanelProps) {
   }, [closeRequest]);
 
   async function save() {
-    const d = rebase(draft, snap.tasks, snap.settings);
+    const d = rebase(draft, tasks, settings);
     const errs: Errors = {};
     for (const e of Object.values(d.edits)) for (const [k, v] of Object.entries(validateTaskFields(e))) errs[`${e.id}.${k}`] = v;
     if (d.settings) for (const [k, v] of Object.entries(validateSettings(d.settings))) errs[`settings.${k}`] = v;

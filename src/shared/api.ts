@@ -12,11 +12,14 @@ export interface MonolithApi {
   command(cmd: Command): Promise<CommandResult>;
   expand(): Promise<void>;
   collapse(): Promise<void>;
-  reportHeight(height: number): void;
+  /** The compact card's measured size; main fits the window to it (top-left anchored). */
+  reportSize(width: number, height: number): void;
   dragStart(): void;
   /** Resolves true if the pointer moved more than 4 px (a drag), false for a click. */
   dragEnd(): Promise<boolean>;
   quit(): void;
+  /** Log the reason and relaunch the app (used by the renderer's error boundary). */
+  restart(reason: string): void;
 }
 
 export const CHANNELS = {
@@ -26,8 +29,9 @@ export const CHANNELS = {
   command: 'monolith:command',
   expand: 'monolith:expand',
   collapse: 'monolith:collapse',
-  reportHeight: 'monolith:reportHeight',
+  reportSize: 'monolith:reportSize',
   dragStart: 'monolith:dragStart',
   dragEnd: 'monolith:dragEnd',
   quit: 'monolith:quit',
+  restart: 'monolith:restart',
 } as const;

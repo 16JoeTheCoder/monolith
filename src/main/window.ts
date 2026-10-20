@@ -13,11 +13,13 @@
 
 import { BrowserWindow, screen, type Rectangle } from 'electron';
 
-export const COMPACT_WIDTH = 300;
 export const EXPANDED_WIDTH = 420;
 const MARGIN = 16;
+// Compact window fits the card; these bounds stop runaway sizes from huge fonts.
+const MIN_W = 240;
+const MAX_W = 520;
 const MIN_H = 80;
-const MAX_H = 180;
+const MAX_H = 260;
 const DRAG_THRESHOLD = 4;
 
 type Pos = { x: number; y: number };
@@ -25,15 +27,16 @@ type Pos = { x: number; y: number };
 export class OverlayWindow {
   readonly win: BrowserWindow;
   expanded = false;
+  private compactWidth = 300;
   private compactHeight = 96;
   private anchor: Pos;
   private drag: { timer: NodeJS.Timeout; cursor: Pos; bounds: Rectangle; moved: boolean } | null = null;
 
   constructor(preload: string, saved: Pos | null, private onMoved: (pos: Pos) => void) {
-    this.anchor = this.clampAnchor(saved ?? defaultAnchor(), COMPACT_WIDTH, this.compactHeight);
+    this.anchor = this.clampAnchor(saved ?? defaultAnchor(), this.compactWidth, this.compactHeight);
     this.win = new BrowserWindow({
       ...this.anchor,
-      width: COMPACT_WIDTH,
+      width: this.compactWidth,
       height: this.compactHeight,
       frame: false,
       transparent: true,
@@ -74,17 +77,20 @@ export class OverlayWindow {
     if (this.win.isDestroyed() || !this.expanded) return;
     this.expanded = false;
     this.win.setFocusable(false);
-    this.win.setBounds({ ...this.anchor, width: COMPACT_WIDTH, height: this.compactHeight });
+    this.win.setBounds({ ...this.anchor, width: this.compactWidth, height: this.compactHeight });
     this.win.hide();
     this.win.showInactive();
     this.win.setAlwaysOnTop(true, 'screen-saver');
   }
 
-  setCompactHeight(h: number): void {
+  /** Fit the compact window to the card, keeping the top-left corner where it is. */
+  setCompactSize(w: number, h: number): void {
+    const width = Math.round(Math.min(MAX_W, Math.max(MIN_W, w)));
     const height = Math.round(Math.min(MAX_H, Math.max(MIN_H, h)));
-    if (height === this.compactHeight) return;
+    if (width === this.compactWidth && height === this.compactHeight) return;
+    this.compactWidth = width;
     this.compactHeight = height;
-    if (!this.expanded && !this.drag) this.win.setBounds({ ...this.anchor, width: COMPACT_WIDTH, height });
+    if (!this.expanded && !this.drag) this.win.setBounds({ ...this.anchor, width, height });
   }
 
   dragStart(): void {
@@ -122,7 +128,7 @@ export class OverlayWindow {
 
   /** Same top-left anchor; shifted up only if the panel would overflow the bottom. */
   private expandedBounds(): Rectangle {
-    const wa = screen.getDisplayMatching({ ...this.anchor, width: COMPACT_WIDTH, height: this.compactHeight }).workArea;
+    const wa = screen.getDisplayMatching({ ...this.anchor, width: this.compactWidth, height: this.compactHeight }).workArea;
     const height = Math.min(700, wa.height - 2 * MARGIN);
     const x = Math.min(Math.max(this.anchor.x, wa.x), wa.x + wa.width - EXPANDED_WIDTH);
     const y = Math.max(wa.y, Math.min(this.anchor.y, wa.y + wa.height - height));

@@ -1,5 +1,7 @@
 // Form fields for a task (used by "Add task" and the inline editor) and for a
 // timer config (also used by Settings). Only the selected mode's fields show.
+// No hidden "More" section: a task is a name, a finish condition, an optional
+// priority and estimate, and a timer.
 
 import type { Errors } from '../shared/validation';
 import { hmsToMs, splitHms } from '../shared/validation';
@@ -26,6 +28,18 @@ export function NumInput(props: { value: number; onChange: (n: number) => void; 
   );
 }
 
+function Segmented<T extends string>(props: { value: T; options: [T, string][]; onChange: (v: T) => void; label: string; small?: boolean }) {
+  return (
+    <div className={`segmented${props.small ? ' small' : ''}`} role="radiogroup" aria-label={props.label}>
+      {props.options.map(([v, text]) => (
+        <button key={v} type="button" role="radio" aria-checked={props.value === v} className={props.value === v ? 'seg active' : 'seg'} onClick={() => props.onChange(v)}>
+          {text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function TimerFields(props: { value: TimerConfig; onChange: (t: TimerConfig) => void; errors: Errors; prefix: string; disabled?: boolean }) {
   const { value: t, onChange, errors, prefix, disabled } = props;
   const err = (k: string) => errors[`${prefix}.${k}`];
@@ -35,24 +49,11 @@ export function TimerFields(props: { value: TimerConfig; onChange: (t: TimerConf
     onChange({ ...t, countdown: { ...t.countdown, durationMs: hmsToMs(n.h, n.m, n.s) } });
   };
   const setPomo = (patch: Partial<TimerConfig['pomodoro']>) => onChange({ ...t, pomodoro: { ...t.pomodoro, ...patch } });
-  const modes: TimerMode[] = ['countdown', 'pomodoro', 'stopwatch'];
+  const modes: [TimerMode, string][] = [['countdown', 'Countdown'], ['pomodoro', 'Pomodoro'], ['stopwatch', 'Stopwatch']];
 
   return (
     <fieldset className="timer-fields" disabled={disabled}>
-      <div className="segmented" role="radiogroup" aria-label="Timer mode">
-        {modes.map((m) => (
-          <button
-            key={m}
-            type="button"
-            role="radio"
-            aria-checked={t.mode === m}
-            className={t.mode === m ? 'seg active' : 'seg'}
-            onClick={() => onChange({ ...t, mode: m })}
-          >
-            {m === 'countdown' ? 'Countdown' : m === 'pomodoro' ? 'Pomodoro' : 'Stopwatch'}
-          </button>
-        ))}
-      </div>
+      <Segmented value={t.mode} options={modes} onChange={(mode) => onChange({ ...t, mode })} label="Timer mode" />
       {t.mode === 'countdown' && (
         <>
           <div className="grid3">
@@ -83,10 +84,12 @@ export function TimerFields(props: { value: TimerConfig; onChange: (t: TimerConf
           <label className="check"><input type="checkbox" checked={t.pomodoro.autoStartWork} onChange={(e) => setPomo({ autoStartWork: e.target.checked })} /> Auto-start work after breaks</label>
         </>
       )}
-      {t.mode === 'stopwatch' && <p className="muted small">Counts up. Set an estimate under More to see progress.</p>}
+      {t.mode === 'stopwatch' && <p className="muted small">Counts up. Add an estimate to see progress.</p>}
     </fieldset>
   );
 }
+
+const PRIORITIES: [Priority, string][] = [['none', 'None'], ['low', 'Low'], ['medium', 'Med'], ['high', 'High']];
 
 export function TaskFields(props: {
   value: TaskValues;
@@ -95,9 +98,13 @@ export function TaskFields(props: {
   prefix: string;
   finishLocked?: boolean;
   timerLocked?: boolean;
+  /** Calibration multiplier (actual / estimate), when there is enough history. */
+  pace?: number | null;
 }) {
-  const { value: v, onChange, errors, prefix, finishLocked, timerLocked } = props;
+  const { value: v, onChange, errors, prefix, finishLocked, timerLocked, pace } = props;
   const err = (k: string) => errors[`${prefix}${k}`];
+  const estMin = v.estimateMs === null ? NaN : v.estimateMs / MIN;
+  const paceHint = pace && Number.isFinite(estMin) && estMin > 0 ? `About ${Math.round(estMin * pace)} min at your usual pace.` : undefined;
   return (
     <div className="stack tight">
       <Field label="Task name" error={err('name')}>
@@ -114,43 +121,18 @@ export function TaskFields(props: {
           <textarea className="input" rows={2} value={v.finishCondition} onChange={(e) => onChange({ finishCondition: e.target.value })} />
         </Field>
       )}
-      <Field label="Value" error={err('value')} hint="Zero is fine.">
-        <NumInput value={v.value} min={0} onChange={(value) => onChange({ value })} />
-      </Field>
+      <div className="grid2">
+        {/* Not a <label>: clicking a label would press the first segment. */}
+        <div className="field">
+          <span className="field-label">Priority</span>
+          <Segmented small value={v.priority} options={PRIORITIES} onChange={(priority) => onChange({ priority })} label="Priority" />
+        </div>
+        <Field label="Estimate (min, optional)" error={err('estimateMs')} hint={paceHint}>
+          <NumInput value={estMin} min={1} onChange={(m) => onChange({ estimateMs: Number.isFinite(m) ? m * MIN : null })} />
+        </Field>
+      </div>
       {timerLocked && <p className="muted small">Pause to change timer settings.</p>}
       <TimerFields value={v.timer} onChange={(timer) => onChange({ timer })} errors={errors} prefix={`${prefix}timer`} disabled={timerLocked} />
-      <details className="more">
-        <summary>More</summary>
-        <div className="stack tight">
-          <Field label="Notes" error={err('notes')}>
-            <textarea className="input" rows={3} maxLength={2000} value={v.notes} onChange={(e) => onChange({ notes: e.target.value })} />
-          </Field>
-          <div className="grid2">
-            <Field label="Priority" error={err('priority')}>
-              <select className="input" value={v.priority} onChange={(e) => onChange({ priority: e.target.value as Priority })}>
-                <option value="none">None</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </Field>
-            <Field label="Deadline" error={err('deadline')}>
-              <input
-                className="input"
-                type="date"
-                value={v.deadline ? v.deadline.slice(0, 10) : ''}
-                onChange={(e) => onChange({ deadline: e.target.value ? new Date(`${e.target.value}T23:59:00`).toISOString() : null })}
-              />
-            </Field>
-          </div>
-          <Field label="Estimate (minutes)" error={err('estimateMs')}>
-            <NumInput value={v.estimateMs === null ? NaN : v.estimateMs / MIN} min={1} onChange={(m) => onChange({ estimateMs: Number.isFinite(m) ? m * MIN : null })} />
-          </Field>
-          <label className="check">
-            <input type="checkbox" checked={v.valueIsEarned} onChange={(e) => onChange({ valueIsEarned: e.target.checked })} /> Value is earned income
-          </label>
-        </div>
-      </details>
     </div>
   );
 }

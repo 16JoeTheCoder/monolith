@@ -1,7 +1,7 @@
-// Single-focus rules: complete, drop, reopen, delete, reorder, money, validation.
+// Single-focus rules: complete, drop, reopen, delete, reorder, validation.
 import { describe, expect, it } from 'vitest';
 import {
-  activeTask, addTask, completeTask, computeStats, deleteTask, dropTask, moneyTotals, moveTask, reopenTask, saveDraft, timerCommand,
+  activeTask, addTask, completeTask, deleteTask, dropTask, moveTask, reopenTask, saveDraft, timerCommand,
 } from '../src/shared/tasks';
 import { isFinishPhrase, validateTaskFields, validateTimer } from '../src/shared/validation';
 import { MIN, SEC, T0, dataWith, must } from './helpers';
@@ -26,7 +26,7 @@ describe('queue rules', () => {
 
   it('completing attributes time only to that task and promotes the next (idle)', () => {
     let d = must(timerCommand(dataWith('a', 'b'), 'start', T0)).data;
-    d = must(completeTask(d, 'a', PHRASE, T0 + 7 * MIN)).data;
+    d = must(completeTask(d, 'a', PHRASE, 'fully', T0 + 7 * MIN)).data;
     const a = d.tasks.find((t) => t.id === 'a')!;
     const b = d.tasks.find((t) => t.id === 'b')!;
     expect(a.status).toBe('completed');
@@ -34,13 +34,13 @@ describe('queue rules', () => {
     expect(b.status).toBe('active');
     expect(b.workMs).toBe(0);
     expect(b.runtime.status).toBe('idle');
-    expect(completeTask(d, 'b', 'done', T0).ok).toBe(false);
+    expect(completeTask(d, 'b', 'done', 'fully', T0).ok).toBe(false);
   });
 
   it('drop sends the task to the back, keeps time and needs a reason', () => {
     let d = must(timerCommand(dataWith('a', 'b', 'c'), 'start', T0)).data;
-    expect(dropTask(d, 'a', 'no', T0 + MIN).ok).toBe(false);
-    d = must(dropTask(d, 'a', 'blocked on review', T0 + 3 * MIN)).data;
+    expect(dropTask(d, 'a', 'no', 'blocked', T0 + MIN).ok).toBe(false);
+    d = must(dropTask(d, 'a', 'blocked on review', 'blocked', T0 + 3 * MIN)).data;
     expect(d.tasks.filter((t) => t.status !== 'completed').map((t) => t.id)).toEqual(['b', 'c', 'a']);
     const a = d.tasks.find((t) => t.id === 'a')!;
     expect(a.workMs).toBe(3 * MIN);
@@ -50,16 +50,16 @@ describe('queue rules', () => {
   });
 
   it('drop is refused when nothing else is queued', () => {
-    expect(dropTask(dataWith('a'), 'a', 'whatever', T0).ok).toBe(false);
+    expect(dropTask(dataWith('a'), 'a', 'whatever', 'blocked', T0).ok).toBe(false);
   });
 
   it('reopen puts a completed task at the front of the queue, keeping totals', () => {
     let d = must(timerCommand(dataWith('a', 'b', 'c'), 'start', T0)).data;
-    d = must(completeTask(d, 'a', PHRASE, T0 + MIN)).data;
+    d = must(completeTask(d, 'a', PHRASE, 'fully', T0 + MIN)).data;
     d = must(reopenTask(d, 'a', T0 + 2 * MIN)).data;
     expect(d.tasks.filter((t) => t.status !== 'completed').map((t) => t.id)).toEqual(['b', 'a', 'c']);
     expect(d.tasks.find((t) => t.id === 'a')!.workMs).toBe(MIN);
-    let solo = must(completeTask(dataWith('x'), 'x', PHRASE, T0)).data;
+    let solo = must(completeTask(dataWith('x'), 'x', PHRASE, 'fully', T0)).data;
     solo = must(reopenTask(solo, 'x', T0)).data;
     expect(activeTask(solo)?.id).toBe('x');
   });
@@ -83,12 +83,10 @@ describe('queue rules', () => {
   });
 });
 
-describe('validation and money', () => {
-  it('requires a finish condition and accepts zero and decimal values', () => {
+describe('validation', () => {
+  it('requires a finish condition', () => {
     expect(validateTaskFields({ name: 'x', finishCondition: 'short' }).finishCondition).toBeDefined();
-    expect(validateTaskFields({ name: 'x', finishCondition: 'long enough text', value: 0 })).toEqual({});
-    expect(validateTaskFields({ name: 'x', finishCondition: 'long enough text', value: 12.5 })).toEqual({});
-    expect(validateTaskFields({ name: 'x', finishCondition: 'long enough text', value: -1 }).value).toBeDefined();
+    expect(validateTaskFields({ name: 'x', finishCondition: 'long enough text', estimateMs: 30 * MIN, priority: 'high' })).toEqual({});
     expect(addTask(dataWith(), { name: 'x', finishCondition: 'nope' }, T0, 'x').ok).toBe(false);
   });
 
@@ -99,28 +97,13 @@ describe('validation and money', () => {
     expect(validateTimer({ ...base, pomodoro: { ...base.pomodoro, workMs: 181 * MIN } })['timer.workMs']).toBeDefined();
     expect(validateTimer({ ...base, pomodoro: { ...base.pomodoro, sessionsBeforeLongBreak: 2.5 } })['timer.sessions']).toBeDefined();
   });
-
-  it('totals value, earned income and the est. hourly rate', () => {
-    let d = must(timerCommand(dataWith('a', 'b', 'c'), 'start', T0)).data;
-    d.tasks = d.tasks.map((t) => (t.id === 'a' ? { ...t, value: 100.5, valueIsEarned: true } : t.id === 'b' ? { ...t, value: 0 } : t));
-    d = must(completeTask(d, 'a', PHRASE, T0 + 20 * MIN)).data;
-    d = must(completeTask(d, 'b', PHRASE, T0 + 20 * MIN)).data;
-    const m = moneyTotals(d.tasks);
-    expect(m.value).toBe(100.5);
-    expect(m.earned).toBe(100.5);
-    expect(m.ratePerHour).toBeCloseTo(301.5);
-    const s = computeStats(d, T0 + 31 * MIN);
-    expect(s.started).toBe(1);
-    expect(s.finished).toBe(2);
-    expect(s.focusedWeek).toBe(20 * MIN);
-  });
 });
 
 describe('saveDraft', () => {
   it('applies edits atomically without touching a running timer', () => {
     const d = must(timerCommand(dataWith('a'), 'start', T0)).data;
     const a = d.tasks[0];
-    const edit: TaskEdit = { id: 'a', name: 'renamed', notes: 'n', finishCondition: a.finishCondition, priority: 'high', value: 3, valueIsEarned: false, deadline: null, estimateMs: null, timer: a.timer };
+    const edit: TaskEdit = { id: 'a', name: 'renamed', finishCondition: a.finishCondition, priority: 'high', estimateMs: null, timer: a.timer };
     const r = must(saveDraft(d, { tasks: [edit], settings: null }, T0 + MIN));
     expect(r.data.tasks[0].name).toBe('renamed');
     expect(r.data.tasks[0].runtime).toEqual(a.runtime);

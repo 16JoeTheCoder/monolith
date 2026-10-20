@@ -18,10 +18,11 @@ const api: MonolithApi = {
   command: (cmd) => ipcRenderer.invoke(CHANNELS.command, cmd),
   expand: () => ipcRenderer.invoke(CHANNELS.expand),
   collapse: () => ipcRenderer.invoke(CHANNELS.collapse),
-  reportHeight: (h) => ipcRenderer.send(CHANNELS.reportHeight, h),
+  reportSize: (w, h) => ipcRenderer.send(CHANNELS.reportSize, w, h),
   dragStart: () => ipcRenderer.send(CHANNELS.dragStart),
   dragEnd: () => ipcRenderer.invoke(CHANNELS.dragEnd),
   quit: () => ipcRenderer.send(CHANNELS.quit),
+  restart: (reason) => ipcRenderer.send(CHANNELS.restart, reason),
 };
 
 contextBridge.exposeInMainWorld('monolith', api);

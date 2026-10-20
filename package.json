@@ -1,7 +1,7 @@
 {
   "name": "monolith",
   "productName": "Monolith",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "A Windows focus overlay that keeps you on exactly one task until it is finished.",
   "author": "16JoeTheCoder",
   "license": "MIT",
@@ -37,10 +37,10 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "Monolith-Setup-${version}.${ext}"
+      "artifactName": "Monolith-Setup-${version}.exe"
     },
     "portable": {
-      "artifactName": "Monolith-Portable-${version}.${ext}"
+      "artifactName": "Monolith-Portable-${version}.exe"
     }
   },
   "devDependencies": {

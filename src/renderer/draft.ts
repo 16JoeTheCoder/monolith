@@ -15,12 +15,8 @@ export function toEdit(t: Task): TaskEdit {
   return {
     id: t.id,
     name: t.name,
-    notes: t.notes,
     finishCondition: t.finishCondition,
     priority: t.priority,
-    value: t.value,
-    valueIsEarned: t.valueIsEarned,
-    deadline: t.deadline,
     estimateMs: t.estimateMs,
     timer: t.timer,
   };

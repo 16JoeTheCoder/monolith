@@ -3,35 +3,104 @@
 A small Windows overlay that makes you work on **one task at a time** and actually finish it.
 
 If you start five things and finish none, Monolith is the friction you need. It sits in the
-top-left corner of your screen as a translucent card that shows one task and one timer.
-Switching tasks is deliberately annoying. Finishing one takes a ritual. Before you start a
-task you have to write down what "finished" means.
+top-left corner of your screen as a translucent card showing one task and one timer.
+Switching tasks is deliberately awkward, finishing takes a short ritual, and before you start
+you have to write down what "finished" means. It also keeps an honest record of where your
+focus went, so you can see when you are drifting.
+
+---
+
+## Install (for friends)
+
+1. Open the repository's **Releases** page on GitHub and download the latest
+   `Monolith-Setup-<version>.exe`. If you would rather not install anything, download
+   `Monolith-Portable-<version>.exe` instead and just run it.
+2. Windows will probably show **"Windows protected your PC"**. That is because the app is not
+   code-signed (signing certificates cost money). Click **More info**, then **Run anyway**.
+3. In the installer you can choose the install folder. Monolith starts as a small card in the
+   top-left corner of your screen. Click it to open the panel.
+
+**Where your data lives:** `%APPDATA%\Monolith\`, usually
+`C:\Users\<you>\AppData\Roaming\Monolith\`. Nothing leaves your PC. There is no account, no
+sync and no telemetry.
+
+**Uninstall:** Windows Settings → Apps → Installed apps → Monolith → Uninstall. The uninstaller
+leaves your data behind on purpose; delete `%APPDATA%\Monolith\` too if you want it gone. For
+the portable version, delete the exe and that folder.
+
+### FAQ
+
+- **Where did the card go?** It may be behind the taskbar or on another monitor. Use the tray
+  icon (bottom-right, maybe under the ^ arrow) → *Open panel*, or press `Ctrl+Alt+Space`.
+- **How do I quit?** Tray icon → *Quit Monolith*, or Settings → About → *Quit Monolith*.
+  Closing the panel only collapses it.
+- **Can I switch to another task?** No, that is the point. Finish it, or drop it with a reason.
+  Dropped tasks go to the back of the queue.
+- **I put my laptop to sleep and it asked me about a time gap.** Monolith never silently counts
+  time it could not see. Choose whether the gap counted.
+- **Something broke.** Click *Restart Monolith* if you see an error card. Send the
+  log at `%APPDATA%\Monolith\logs\monolith.log` to whoever gave you the app.
+- **Start fresh?** Settings → About → *Reset all data*.
 
 ---
 
 ## The single-focus rules
 
-1. **One active task.** Exactly one task is in focus. Everything else waits in the queue;
-   finished tasks go to history. The main view shows only the active task. You cannot switch
-   tasks or start one out of order.
-2. **Define done first.** You can't create a task without a *finish condition*: one or more
-   sentences describing exactly what finished looks like (at least 8 characters). You can
-   edit it until you first start the timer. After that it's locked and shown read-only.
-3. **The finish ritual.** To finish, Monolith shows your finish condition and you type
-   `I have finished this task`. Case, extra spaces and a trailing period don't matter; anything
-   else is rejected. The main process checks the phrase again. The next queued task then
-   becomes active with its timer idle. It never auto-starts.
-4. **Escape hatch: Drop.** Dropping requires a typed reason (at least 3 characters). The timer
-   stops and the tracked time is kept. The task moves to the back of the queue, its drop
-   count goes up, and a `dropped` event is logged. You can't drop when nothing else is
-   queued; delete the task instead.
-5. **Reopen.** Reopening a completed task puts it at the front of the queue, or makes it active
-   if nothing is active. Its totals are kept.
-6. **Delete.** Works for any task. If the task has tracked time, Monolith asks you to confirm
-   in the app first. Deleting the active task promotes the next one.
-7. **Stats, not gamification.** For the current week (from Monday 00:00 local time) you see
-   counts of tasks started, finished and dropped, plus your focused time today and this week.
-   "Started" means the first time a task's timer was started.
+1. **One active task.** Exactly one task is in focus; the rest wait in the queue, and finished
+   tasks go to history. There is no "switch task" and no starting a task out of order.
+2. **Define done first.** A task needs a *finish condition* (at least 8 characters) describing
+   exactly what finished looks like. It is editable until the timer first starts, then locked.
+3. **The finish ritual.** Monolith shows your finish condition and you type
+   `I have finished this task` (case, extra spaces and a trailing period don't matter). Then
+   you grade yourself: **Fully**, **Mostly** or **Barely**. Main re-checks the phrase. A short
+   summary appears, then the next queued task becomes active with its timer idle.
+4. **Escape hatch: Drop.** Pick why, and type a reason (at least 3 characters):
+   - *Blocked by something outside my control*: no penalty.
+   - *I lost focus or interest*: the task's time counts as **orphaned** until you finish it,
+     and your **chain** resets.
+
+   Either way the timer stops, tracked time is kept, and the task goes to the back of the
+   queue. You can't drop when nothing else is queued; delete the task instead.
+5. **Reopen.** A completed task goes back to the front of the queue (or becomes active if
+   nothing is). Totals are kept.
+6. **Delete.** Works for any task; tasks with tracked time ask for confirmation first. Deleting
+   an unfinished task with work time adds that time to *orphaned*. Your daily record and
+   journal keep everything already recorded.
+
+---
+
+## What the numbers mean
+
+All of these live on the **Done** tab. None of them appear on the compact card.
+
+| Number | Meaning |
+| --- | --- |
+| **Banked** | Total tracked work of every task you finished. |
+| **Orphaned** | Work on tasks you dropped for lost focus (until finished), plus deleted unfinished work. |
+| **Chain** | Finishes in a row with at least 10 tracked minutes and no lost-focus drop in between. A shorter finish neither counts nor breaks it. Current and best. |
+| **This week** | "Finished 3 of 4 started this week - 2 fully". Weeks start Monday 00:00 local time. |
+| **Focus per day, lifetime** | All focus time divided by every calendar day since your first focused day (weekends and zero days included), with the last-7-days average beside it. |
+| **Start latency** | Average time between a task becoming active and your first Start press, for tasks first started this week. |
+| **Estimates** | After 3 finished tasks with estimates: the median of actual / estimate, e.g. "Your estimates run 40% short - multiply by 1.4", or "accurate" within 10%. The add/edit form then shows "about Z min at your usual pace". |
+| **Heatmap** | Focus per day for the last 20 weeks, 4 shades relative to your best day. Hover for the value. |
+
+### Focus Index (0-100)
+
+Hidden until you have 3 finished tasks and 3 days with focus ("Calibrating: 1/3 tasks, 2/3
+days"). It combines five parts:
+
+| Part | Weight | Measures |
+| --- | --- | --- |
+| Completion | 35% | (Fully + ½ × Mostly) / started. Ungraded finishes count as Mostly. |
+| Depth | 25% | Share of focus time in stretches of 15 minutes or more. |
+| Estimates | 15% | Median of min(actual, estimate) / max(actual, estimate); 0.5 if none. |
+| Consistency | 15% | Days with focus in the last 14, divided by 14. |
+| Few pauses | 10% | 1 − (pauses per focus hour / 6), clamped. |
+
+Each part is pulled toward 0.5 by a weight of 5 / (n + 5), where n is the number of finished
+tasks, so three lucky tasks can't give you 100. Confidence is *low* under 10 tasks, *medium*
+from 10 to 29 and *high* from 30. One sentence names your weakest part with its real number,
+for example "Your median stretch is 11 min."
 
 ---
 
@@ -42,174 +111,155 @@ Requires Node 20+ and npm.
 ```bash
 npm install          # also downloads the Electron binary
 npm run dev          # Vite dev server + Electron (hot reload for the UI)
-npm test             # vitest: timer engine, task rules, store, recovery
+npm test             # vitest: timer engine, rules, record, metrics, migration, store, recovery
 npm run typecheck    # tsc --noEmit over src and tests
 npm run build        # dist/main.js, dist/preload.js, dist/renderer/
-npm run package:win      # Windows installer + portable exe in release/  (run on Windows)
+npm run package:win      # installer + portable exe in release/  (run on Windows)
 npm run package:win:dir  # unpacked build in release/win-unpacked/ for quick checks
 npm run icon         # regenerate build/icon.png
 ```
 
-`npm run dev` restarts the UI on save. After changing main-process code, stop it and run it
-again.
+### How to release
 
-### Getting the installer from GitHub Actions
+```bash
+# bump "version" in package.json (npm version 0.2.0 --no-git-tag-version), update CHANGELOG.md, commit, then:
+git tag v0.2.0 && git push --tags
+```
 
-`.github/workflows/build-windows.yml` runs on `windows-latest` for every push and pull
-request. It runs `npm ci`, the tests, the typecheck and the build, then electron-builder.
+`.github/workflows/build-windows.yml` runs on `windows-latest` for every push and pull request:
+`npm ci`, tests, typecheck, build, then electron-builder. Every run uploads the exes as the
+**Monolith-windows** artifact. On a `v*` tag it also creates a GitHub Release named
+`Monolith v0.2.0` with `Monolith-Setup-0.2.0.exe` and `Monolith-Portable-0.2.0.exe` attached
+(the workflow has `permissions: contents: write`).
 
-1. Open the repository on GitHub, go to **Actions** and choose **Build Windows**.
-2. Open the latest successful run and download the **Monolith-windows** artifact (a zip).
-3. Inside you'll find `Monolith-Setup-<version>.exe` (installer: you choose the install
-   folder) and `Monolith-Portable-<version>.exe` (no install needed).
-
-If you push a tag such as `v1.0.0`, the same files are also attached to a GitHub Release.
-
-The build is **unsigned**, so Windows SmartScreen will warn you ("Windows protected your PC").
-Click **More info** and then **Run anyway**.
+**Releases on a private repository are only visible to people with access to it.** To share
+with friends, either make the repository public or add them as collaborators.
 
 ---
 
 ## Architecture
 
-Electron + React + TypeScript. esbuild bundles the main process and preload to CommonJS, and
-Vite builds the renderer (`base: './'` so it loads from `file://` when packaged). Runtime
-dependencies are only Electron and React. There is no UI framework, no state library and no
-icon package.
+Electron + React + TypeScript. esbuild bundles main and preload to CommonJS; Vite builds the
+renderer (`base: './'` so it loads from `file://`). Runtime code is only Electron and React: no
+UI framework, no state or chart library, inline SVG icons, CSS grid.
 
 ```
 src/
   shared/      pure logic, no Electron imports (used by main, renderer and tests)
-    types.ts       data model, commands, snapshot
+    types.ts       data model v2, commands, snapshot
     timer.ts       timestamp-based timer engine
-    tasks.ts       single-focus rules, saveDraft, stats, money totals
-    validation.ts  field/timer/settings/accelerator validation, finish phrase
-    format.ts      clock/duration/money/date formatting, week and day starts
+    tasks.ts       single-focus rules, saveDraft, journal and chain on finish/drop
+    record.ts      daily record: books closed work slices, Today figure
+    insights.ts    Done-tab metrics: banked, orphaned, Focus Index, calibration, heatmap
+    migrate.ts     v1 -> v2 migration and sanitising of stored data
+    validation.ts  field/timer/settings/accelerator validation, finish phrase, grades
+    format.ts      clock/duration/date formatting, day keys, week and day starts
     api.ts         the preload API interface and IPC channel names
   main/
-    main.ts        entry: wires controller, window, tray, shortcuts, power events, notifications
+    main.ts        entry: wires controller, window, tray, shortcuts, power events, notifications, log
     controller.ts  state machine: commands, persistence, crash/sleep/clock-jump handling
-    store.ts       atomic JSON store + heartbeat file
-    window.ts      overlay window: sizing, expand/collapse, focus handoff, dragging
-    tray.ts        tray icon (embedded 32 px PNG) and menu
-    shortcuts.ts   global shortcut registration with error reporting
-    ipc.ts         IPC handlers; rebuilds and validates every payload
+    store.ts       atomic JSON store, heartbeat, one-time v1 backup
+    window.ts      overlay window: fit-to-card sizing, expand/collapse, focus handoff, dragging
+    log.ts         userData/logs/monolith.log, rotated at 1 MB with one backup
+    tray.ts, shortcuts.ts, ipc.ts
   preload/preload.ts  exposes window.monolith (contextIsolation + sandbox)
-  renderer/        React UI (App, Compact, Panel, Focus/Queue/Done/Settings tabs, styles.css)
+  renderer/        React UI (App with error boundary, Compact, Panel, four tabs, styles.css)
 tests/           vitest suites
 scripts/         build.mjs, dev.mjs, make-icon.mjs (dependency-free PNG writer)
-build/icon.png   512 px app icon
 ```
 
-**shared/** is the core. Everything that decides behaviour is a pure function that takes an
+**shared/** is the core. Everything that decides behaviour is a pure function with an
 explicit `now`, so the same code runs in main (the authority), in the renderer (to display
-time), and in tests with a fixed clock.
+time and stats) and in tests with a fixed clock.
 
-**timer.ts** turns a task's runtime (status, phase, accumulated time, start of the current
-running slice) into what to show and which boundaries were crossed. See the next section.
+**tasks.ts** implements the rules as immutable transformations of `AppData`, each ending in
+`normalize()`: the first non-completed task is the only active one (its `activatedAt` is set
+when it becomes active), nothing queued keeps running, and settings stay in range.
 
-**tasks.ts** implements the rules above as immutable transformations of `AppData`. Each one
-ends with `normalize()`, which enforces the invariant: the first non-completed task is the
-only active task, and any other task that is somehow still running gets stopped.
+**record.ts** keeps the daily record. Work enters it in exactly one place, `recordWork(prev,
+next)`, which the controller calls on every state change: it books each newly closed work
+session, split at local hour and midnight boundaries, into `days`. Pauses, starts, finishes
+and drops are counted where they happen. Because the record sits beside the tasks rather than
+inside them, deleting a task never rewrites history.
 
-**validation.ts** is shared on purpose. The renderer uses it for inline errors, and main runs
-the same checks again on everything that arrives over IPC.
+**insights.ts** reads the record, the journal and the tasks to produce the Done tab. Nothing
+there is stored; it is recomputed every second from data that is.
 
-**controller.ts** owns the live state. It runs commands through `tasks.ts`, persists
-immediately after every change, notifies main about timer events, and handles every case
-where time passed unobserved. It has no Electron imports, so the tests drive it directly
-against a temp directory.
+**controller.ts** owns the live state, persists after every change, and handles every case
+where time passed unobserved. It has no Electron imports, so tests drive it against a temp
+directory.
 
-**store.ts** writes `monolith-data.json` crash-safely and keeps the heartbeat file (see
-below).
+**window.ts** manages the one frameless, transparent, always-on-top window. The compact card
+is sized by its content (240-520 × 80-260 px); the renderer measures it with a
+ResizeObserver and main resizes the window to match, keeping the top-left corner fixed, so
+there is never a transparent margin blocking clicks.
 
-**window.ts** manages the one frameless, transparent, always-on-top window. That covers
-sizing it exactly to the card, the expand/collapse order, focus handoff, and drag-by-polling.
-
-**ipc.ts** checks that each message comes from our own window. It then rebuilds every payload
-field by field from known keys before the controller validates the values again. The preload
-exposes one typed API: a snapshot stream, one `command` channel, and a few window
-operations.
-
-**renderer/** gets a snapshot from main only when something changes. It works out the
-displayed time itself every 250 ms from the snapshot and `Date.now()`, using the same
-`display()` as main. So there is no IPC traffic once per second.
+**renderer/** receives a snapshot only when something changes and works out displayed time
+itself from `Date.now()`, so there is no per-second IPC.
 
 ---
 
 ## How the timer engine works (and why)
 
-Time is **never counted with an interval**. A runtime stores:
+Time is **never counted with an interval**. A runtime stores `phaseElapsedMs` (time already
+banked in the current phase) and `sliceStartedAt` (when the current running stretch began, or
+`null`). Elapsed is `phaseElapsedMs + (now - sliceStartedAt)`, so a throttled renderer, a late
+tick or a busy CPU can't make the clock drift.
 
-- `phaseElapsedMs`: time already banked in the current phase.
-- `sliceStartedAt`: when the current running stretch (a *slice*) began, or `null`.
-
-Elapsed time is `phaseElapsedMs + (now - sliceStartedAt)`. A throttled renderer, a late tick or
-a busy CPU therefore can't make the clock drift.
-
-**Closing a slice** banks its length into `phaseElapsedMs`. It also adds the length to either
-`workMs` (work phases, stopwatch, countdown) or `breakMs` (Pomodoro breaks), and appends a
-session record (only the newest 300 are kept). Break time can never be counted as work time.
-
-**`advance(task, now)`** handles every boundary crossed up to `now`:
-
-- **Countdown.** When the countdown reaches its duration, it either *stops*: status becomes
-  `completed`, elapsed is clamped to the duration, and remaining time is never negative. Or it
-  *continues* into overtime and the event fires only once (`expiredNotified`).
-- **Pomodoro.** When a phase ends, the slice is closed at the phase's **exact end timestamp**,
-  not at `now`. That way a tick that arrives 3 minutes late can't move 3 minutes of break into
-  work. After a work phase, `pomodorosCompleted` and the cycle count go up, and the next phase
-  is a long break if the cycle count has reached the configured number (the count then resets),
-  otherwise a short break. If auto-start is on for the next phase, it starts running *from that
-  same end timestamp*. This repeats with a guard, so a long sleep with auto-start correctly
-  passes through several phases. Without auto-start, the next phase waits as `idle`.
-
-`reset` clears only the current display and cycle; totals and sessions stay. `skipPhase`
-(Pomodoro only) ends the current phase immediately. Skipping a work phase earns no pomodoro.
-If the clock moves backwards, elapsed time is clamped at 0 and is never negative.
+Closing a slice adds its length to `workMs` or (for Pomodoro breaks) `breakMs` and appends a
+session (newest 300 kept). `advance(task, now)` handles every boundary crossed up to `now`.
+A countdown either stops at zero (never negative) or continues into overtime and notifies
+once. A Pomodoro phase is closed at its **exact end timestamp**, not at `now`, so a late tick
+can't move break time into work. Auto-start begins the next phase from that same timestamp,
+looping with a guard through several phases after a long sleep. `reset` clears only the
+display; `skipPhase` gives no pomodoro credit for skipped work. A clock moving backwards never
+produces negative time.
 
 ---
 
 ## Sleep, shutdown and crash recovery
 
-The rule: when Monolith finds that time passed while it wasn't watching, it stops the timer at
-the **last moment it knows it was alive** and asks you whether that stretch should count.
+When Monolith finds that time passed while it wasn't watching, it stops the timer at the
+**last moment it knows it was alive** and asks whether that stretch should count.
 
-- **Heartbeat.** While a timer runs, main writes the current time to a tiny `heartbeat` file
-  every 5 s.
-- **Startup.** If the active task was running and `now - lastAlive > 15 s` (where
-  `lastAlive = max(heartbeat, sliceStartedAt)`), the slice is closed at `lastAlive`, the timer
-  is paused and a *gap* is raised. Smaller gaps, such as a quick restart, continue seamlessly.
-- **While running.** Main ticks every 250 ms. If more than 10 s passed between ticks (sleep,
-  suspension, the clock jumping forward), it pauses at the last tick and raises a gap. If the
-  clock moved *backwards*, the slice is closed at the last tick and restarted at the new `now`.
-  Nothing is lost and nothing goes negative.
-- **Power events.** `suspend` pauses at that exact moment. `resume` raises a gap. `shutdown`
-  writes a final heartbeat.
-- **The prompt.** The panel opens automatically without taking focus and shows: *"Your PC was
-  off/asleep from HH:MM to HH:MM (X). Count that time, or go back to the last recorded time?"*
-  Timer controls and the start/pause shortcut are disabled until you answer.
-  - **Count it:** the timer is replayed as if it had run from `from` to `to`, so Pomodoro
-    boundaries inside the gap are handled correctly (their notifications are suppressed).
-  - **Go back:** the timer stays paused at the last recorded time.
-  - Either way, the timer **stays paused** until you press Resume.
+- **Heartbeat:** while a timer runs, main writes the time to `heartbeat` every 5 s.
+- **Startup:** if the active task was running and `now - max(heartbeat, sliceStartedAt) > 15 s`,
+  the slice is closed there, the timer pauses and a gap is raised.
+- **While running:** a 250 ms tick. More than 10 s between ticks (sleep, forward jump) pauses at
+  the last tick and raises a gap; a backwards clock closes the slice at the last tick and
+  restarts it.
+- **Power events:** `suspend` pauses at that moment, `resume` raises a gap, `shutdown` writes a
+  final heartbeat.
+- **The prompt:** *"Your PC was off/asleep from HH:MM to HH:MM (X). Count that time, or go back
+  to the last recorded time?"* Counting replays the gap (Pomodoro boundaries included, their
+  notifications suppressed) and those slices enter the daily record like any other. Either
+  way the timer stays paused until you press Resume.
 
 ---
 
 ## Where your data lives
 
-`%APPDATA%\Monolith\` (Electron's `userData`), usually `C:\Users\<you>\AppData\Roaming\Monolith\`:
+`%APPDATA%\Monolith\`:
 
 | File | Purpose |
 | --- | --- |
-| `monolith-data.json` | all tasks, settings, window position, events |
-| `monolith-data.json.bak` | the previous version; used automatically if the main file is corrupt |
+| `monolith-data.json` | tasks, settings, window position, events, daily record, journal (format v2) |
+| `monolith-data.json.bak` | previous version; used automatically if the main file is corrupt |
+| `state.v1.bak.json` | your 0.1 data exactly as it was before the one-time migration to v2 |
 | `heartbeat` | last time a running timer was seen alive |
+| `logs\monolith.log` (+ `.1`) | uncaught errors; rotated at 1 MB |
 
-Every save writes a `.tmp` file, flushes it to disk (fsync), copies the current file to
-`.bak`, then renames `.tmp` over the real file.
+Every save writes `.tmp`, fsyncs it, copies the current file to `.bak` and renames `.tmp` over
+the real file. To reset: Settings → About → *Reset all data*, or quit and delete the folder.
 
-**To reset Monolith:** quit it from the tray, delete the folder above, and start it again.
+### Migrating from 0.1
+
+On the first launch of 0.2, a v1 file is copied to `state.v1.bak.json`, then migrated:
+`value`, `valueIsEarned`, `notes`, `deadline`, `currency` and `showMoneyInCompact` are dropped.
+Tasks, sessions, totals, events, settings and the window position are kept. The daily record
+is rebuilt from stored sessions and events, and the journal from completed tasks (grade
+unknown, counted as Mostly in the Focus Index). Each task gets `activatedAt = createdAt` and
+`lostFocusDrops = 0`. Card opacity keeps its old value.
 
 ---
 
@@ -218,35 +268,10 @@ Every save writes a `.tmp` file, flushes it to disk (fsync), copies the current 
 | Shortcut | Action |
 | --- | --- |
 | `Ctrl+Alt+Space` (configurable) | open / collapse the panel (global) |
-| `Ctrl+Alt+P` (configurable) | start / pause the active task (global; ignored while a gap prompt is open) |
-| `Esc` | close the panel (asks Save / Discard / Keep editing if you have unsaved edits) |
+| `Ctrl+Alt+P` (configurable) | start / pause the active task (global; ignored during a gap prompt) |
+| `Esc` | close the panel (asks Save / Discard / Keep editing if there are unsaved edits) |
 | `←` / `→` on the tab bar | switch tabs |
-| `Enter` in the finish ritual | complete the task once the phrase matches |
-
-If a global shortcut can't be registered (usually because another app already uses it), the
-Settings tab shows an error.
-
----
-
-## Using the panel
-
-- **Compact card.** Click it to expand, drag it to move. It has no buttons. The card shows the
-  mode, the state (Running / Paused / Time's up / Ready), the Pomodoro phase and cycle (for
-  example "Work 2/4"), the task name, large digits and a progress bar.
-- **Focus tab.** The active task only: its finish condition, the timer, controls for the
-  current mode, tracked time, **Finish task** and a small **Drop task** link. Queued tasks
-  appear only as a count.
-- **Queue tab.** Add tasks. Shows the pinned "In focus" row and the "Up next" rows with
-  up/down reorder, edit and delete. You can't change the active task's timer while it's
-  running.
-- **Done tab.** Weekly stats, total value, earned income, an estimated rate per tracked hour,
-  and history with Reopen and Delete.
-- **Settings tab.** See the reference below.
-- **Save Changes & Collapse.** Edits to existing tasks and settings stay in a local draft until
-  you press this button. It validates the draft, sends it to main in one go, and main validates
-  it again and applies it atomically. Everything else (add, delete, reorder, finish, drop,
-  reopen, timer controls, the gap answer) takes effect immediately. Saving never touches a
-  running timer.
+| `Enter` in the finish ritual | continue to the grade once the phrase matches |
 
 ---
 
@@ -254,45 +279,45 @@ Settings tab shows an error.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| Default timer mode | Countdown 25 min, stop at zero | Used for new tasks |
-| Countdown | 1 s to 24 h | Stop at zero, or keep counting into overtime |
-| Pomodoro | 25 / 5 / 15 min, long break every 4 | Work 1-180 min, breaks 1-60 min, long break every 1-12 sessions, auto-start breaks/work (off) |
-| Idle opacity | 65% | 50-80%. Only the card background is translucent; text stays opaque |
-| Currency | IDR | IDR, USD, EUR, SGD, JPY, KRW, CHF, GBP, MYR, AUD; at most 2 decimals |
-| Sound | on | short synthesised beep at timer boundaries |
-| Notifications | on | silent desktop notification at timer boundaries |
-| Launch at startup | off | installed app only (`app.isPackaged`); also in the tray menu |
-| Global shortcuts | on | two accelerator fields, validated |
-| Show money in compact | off | shows the task's value on the card |
+| Theme | Graphite | Graphite, Midnight, Ember, Forest; applies to the card and the panel |
+| Accent | theme's | optional custom colour; "Use theme colour" clears it |
+| Card opacity | 65% | 0-100%. Only the background fades; text keeps a shadow for readability |
+| Status row / Task title / Timer digits / Progress bar | 11 / 17 / 34 / 3 px | 9-16, 12-28, 24-64, 2-12. The window grows to fit. *Reset appearance* restores defaults |
+| Default timer | Countdown 25 min, stop at zero | Pomodoro 25/5/15, long break every 4, no auto-start |
+| Sound / Notifications | on / on | at timer boundaries |
+| Launch at startup | off | installed app only; also in the tray menu |
+| Global shortcuts | on | two validated accelerator fields |
 
-Task fields: name (1-120 characters), finish condition (at least 8), value (≥ 0, decimals
-allowed, zero is fine), "value is earned income", notes (up to 2000), priority, deadline and
-estimate.
+Appearance is previewed live on a real compact card in Settings. Like all settings, it is
+applied by **Save Changes & Collapse**.
+
+Task fields: name (1-120 characters), finish condition (at least 8), priority (shown as a
+small dot on the card and queue rows) and an optional estimate in minutes.
 
 ---
 
 ## Decisions made
 
-- **Drop reasons are stored** in the `dropped` event as an optional `reason` field. This is a
-  small addition to the event shape, so you can look back at why you dropped something.
-- **Dropping resets the display to idle** while keeping all tracked time. That keeps "the next
-  task becomes active with its timer idle" true for every queued task.
-- **Starting a countdown that already stopped** at zero begins a fresh round. Totals are kept.
-- **Main is the authority.** Commands go through one `command` IPC channel with a
-  discriminated union. Main rebuilds the payload from known keys and validates it with the
-  same shared validators the UI uses.
-- **The controller has no Electron imports**, so the recovery logic (heartbeat, gaps, clock
-  jumps) is covered by tests against a real temp directory.
-- **The tray and global shortcut ask the renderer to collapse** instead of collapsing
-  directly. That way unsaved edits still get the Save / Discard / Keep editing prompt.
-- **CSP only in production builds.** The Vite dev server needs inline scripts for Fast
-  Refresh, so the strict `Content-Security-Policy` is injected only when building.
-- **No `-webkit-app-region` dragging.** It swallows clicks and can't tell a click from a drag.
-  Main polls the cursor instead (see `window.ts`).
-- **React is a devDependency** because Vite bundles it into the renderer. The packaged app
-  contains no `node_modules`.
-- **The heartbeat is written only while a timer runs**, as the spec requires, so an idle app
-  causes no disk writes.
+- **Orphaned lasts until finish.** A lost-focus task's time stays orphaned even once it is
+  active again; only finishing it clears it.
+- **Short finishes don't break the chain.** A finish under 10 tracked minutes neither extends
+  nor resets it, so finishing small tasks is never punished; only a lost-focus drop resets it.
+- **"Tracked" means work time.** Journal `trackedMs`, banked, calibration and the chain use work
+  time; Pomodoro breaks are excluded.
+- **A pause** is counted only when you press Pause (or the shortcut) on a running slice, not
+  when a countdown stops by itself or the app pauses for sleep.
+- **Start latency** is stored on the task at its first Start (`startLatencyMs`), measured from
+  `activatedAt`; for migrated tasks, from `createdAt`.
+- **Migrated users see the welcome card once**, as it introduces the new finish grade and drop
+  options.
+- **The heatmap always shows 20 weeks**, so it reads as a calendar from day one.
+- **Saving settings never overwrites immediate flags** (welcome dismissed, tray startup toggle).
+- **Version numbering:** 0.1 shipped with `1.0.0` in package.json; 0.2 is `0.2.0` to match the
+  release name.
+- From 0.1: main is the authority and re-validates every IPC payload; the controller has no
+  Electron imports; dragging polls the cursor and calls `setBounds` with a fixed size to avoid
+  DPI drift; CSP is strict in production builds; the heartbeat is written only while a timer
+  runs.
 
 ---
 
@@ -300,52 +325,50 @@ estimate.
 
 **VERIFIED in the Linux sandbox**
 
-- `npm test`: 27 tests pass (timer engine, task rules, validation, money, store round trip,
-  `.bak` fallback, restart with a running timer: gap discard and gap count, backwards clock,
-  saveDraft leaves the runtime untouched).
-- `npm run typecheck` is clean.
-- `npm run build` succeeds.
-- Headless smoke launch (Electron under Xvfb, driven by Playwright from outside the repo):
-  1. The compact card appears at (16, 16), 300 DIP wide, with the window height matching the
-     card.
-  2. Clicking expands it to 420 × 700.
-  3. Quick-add, Start, the finish ritual, the Done stats and Save & Collapse all work.
-  4. No console errors.
-- `electron-builder --win --dir` on Linux produced `app.asar` and the unpacked layout. It then
-  stopped at the step that edits the exe resources, because that step needs wine, which was
-  deliberately not installed.
+- `npm test`: 39 tests pass, covering the timer engine, queue rules, validation, persistence,
+  `.bak` fallback, crash/sleep recovery and clock moving backwards, plus 0.2:
+  - v1 → v2 migration (fields dropped, history kept, record and journal backfilled, backup
+    written once);
+  - the daily record across hour and midnight boundaries, booked once and surviving deletion;
+  - banked, orphaned and chain rules (blocked vs lost-focus drop, the 10-minute rule, a later
+    finish un-orphaning);
+  - the Focus Index (gate, 0-100 bounds, shrinkage, confidence);
+  - calibration, start latency, the lifetime average with zero days, opacity 0 and 100%,
+    font clamping, and Today including the live slice.
+- `npm run typecheck` is clean and `npm run build` succeeds.
+- A headless smoke launch (Electron under Xvfb, driven by Playwright from outside the repo):
+  1. A v1 data file migrated and `state.v1.bak.json` was written.
+  2. The welcome card appeared and dismissed.
+  3. Finish → grade → summary worked, and the Queue and Done tabs rendered.
+  4. Settings changes (0% opacity, 28/64 px fonts, Ember theme) saved, and the compact window
+     resized to fit the card.
+  5. No console errors.
 
 **NOT VERIFIED, needs checking on real Windows**
 
-- Always-on-top above other windows; transparency and rounded corners. Check that there's no
-  invisible area that blocks clicks.
-- DPI scaling at 125% / 150%, and no size drift while dragging.
-- Dragging in both states, and click-versus-drag detection.
-- Focus going back to the previous app on collapse, and the compact card never stealing typing.
-- The sleep/resume gap prompt (sleep the PC with a timer running).
-- Launch at startup (installed build).
-- Global shortcuts and the error message when a shortcut is already taken.
-- Desktop notifications and sound.
-- The NSIS installer (choosing an install folder), the portable exe, and the unsigned-build
-  SmartScreen warning.
+- Always-on-top, transparency, rounded corners and no click-blocking margin.
+- The compact window auto-fit at large fonts and at 125% / 150% display scaling.
+- Readability at 0% opacity over light and dark backgrounds.
+- Dragging, focus handoff on collapse, the sleep/resume prompt.
+- Launch at startup, global shortcuts, notifications and sound.
+- The error boundary's Restart (relaunch) and the log file location.
+- The installer, portable exe, uninstaller and the SmartScreen warning.
 
 ### Manual Windows test checklist
 
-1. Install from the Actions artifact and get past SmartScreen (More info → Run anyway).
-2. The card appears top-left. Click it, add a task with a finish condition, and press Start.
-3. Click into another app and type: keystrokes must go to that app, not Monolith.
-4. Drag the card around, including onto a second monitor if you have one. Restart the app; it
-   should come back where you left it.
-5. Expand, then press Esc: focus should return to the app you were using.
-6. Press `Ctrl+Alt+P` to pause and resume, and `Ctrl+Alt+Space` to toggle the panel.
-7. Set a 1-minute countdown and let it expire: you should get a notification and a beep.
-8. Start a timer, put the PC to sleep for 1 minute, wake it: the gap prompt should appear.
-   Try both answers.
-9. Start a timer, kill Monolith in Task Manager, wait 30 s, start it again: you should get the
-   gap prompt.
-10. Set display scaling to 150% and repeat steps 2 and 4.
-11. Turn on "Start with Windows" in the tray, sign out and back in.
-12. Try the finish ritual with a wrong phrase (rejected) and the exact phrase (accepted).
+1. Install 0.2 over an existing 0.1 install with some history. Check
+   `%APPDATA%\Monolith\state.v1.bak.json` exists and that tasks, totals and the Done numbers
+   look right.
+2. On first expand the welcome card shows; *Got it* hides it for good.
+3. Settings → Appearance: set title 28 px and digits 64 px, then save. The card grows and the
+   window fits it exactly: click just outside its edges and the click must reach the app
+   underneath. Repeat at 150% display scaling.
+4. Set opacity to 0%, save, and check the text is readable over a white page and a dark
+   wallpaper.
+5. Finish a task: phrase → grade → 5 s summary → next task. Drop one as *lost focus* and check
+   Orphaned and Chain on the Done tab.
+6. Sleep the PC with a timer running, wake it, and answer the gap prompt.
+7. Uninstall and confirm `%APPDATA%\Monolith\` is left behind.
 
 ---
 
@@ -354,8 +377,9 @@ estimate.
 ```powershell
 git clone https://github.com/16JoeTheCoder/monolith.git
 cd monolith
+git checkout v0.2
 npm ci
 npm test
 npm run dev               # try it without installing
-npm run package:win       # release\Monolith-Setup-1.0.0.exe and release\Monolith-Portable-1.0.0.exe
+npm run package:win       # release\Monolith-Setup-0.2.0.exe and release\Monolith-Portable-0.2.0.exe
 ```

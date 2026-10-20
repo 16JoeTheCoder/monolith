@@ -8,6 +8,7 @@
 // and ask the user whether the unobserved stretch should count.
 
 import { randomUUID } from 'node:crypto';
+import { recordWork } from '../shared/record';
 import { advance, closeSlice, start } from '../shared/timer';
 import * as T from '../shared/tasks';
 import type { AppData, Command, CommandResult, Gap, Settings, Task, TimerEvent } from '../shared/types';
@@ -145,10 +146,10 @@ export class Controller {
         res = T.moveTask(d, cmd.taskId, cmd.direction, now);
         break;
       case 'completeTask':
-        res = T.completeTask(d, cmd.taskId, cmd.phrase, now);
+        res = T.completeTask(d, cmd.taskId, cmd.phrase, cmd.grade, now);
         break;
       case 'dropTask':
-        res = T.dropTask(d, cmd.taskId, cmd.reason, now);
+        res = T.dropTask(d, cmd.taskId, cmd.reason, cmd.kind, now);
         break;
       case 'reopenTask':
         res = T.reopenTask(d, cmd.taskId, now);
@@ -165,10 +166,20 @@ export class Controller {
       case 'setLaunchAtStartup':
         res = { ok: true, data: { ...d, settings: { ...d.settings, launchAtStartup: cmd.enabled } }, timerEvents: [] };
         break;
+      case 'dismissWelcome':
+        res = { ok: true, data: { ...d, settings: { ...d.settings, onboarded: true } }, timerEvents: [] };
+        break;
+      case 'resetAll':
+        // Everything goes except where the window sits on screen.
+        this.pendingGap = null;
+        this.gapTaskId = null;
+        this.suspendedAt = null;
+        res = { ok: true, data: { ...T.emptyData(), windowPos: d.windowPos }, timerEvents: [] };
+        break;
     }
     if (!res.ok) return { ok: false, error: res.error, fields: res.fields };
     const prevSettings = d.settings;
-    this.data = res.data;
+    this.set(res.data);
     this.persist();
     if (res.timerEvents.length) this.hooks.onTimerEvents(res.timerEvents);
     if (prevSettings !== this.data.settings) this.hooks.onSettingsChanged(prevSettings, this.data.settings);
@@ -220,7 +231,12 @@ export class Controller {
   }
 
   private replace(task: Task): void {
-    this.data = { ...this.data, tasks: this.data.tasks.map((t) => (t.id === task.id ? task : t)) };
+    this.set({ ...this.data, tasks: this.data.tasks.map((t) => (t.id === task.id ? task : t)) });
+  }
+
+  /** The single place state changes, so every closed work slice reaches the daily record exactly once. */
+  private set(next: AppData): void {
+    this.data = recordWork(this.data, next);
   }
 
   private persist(): void {

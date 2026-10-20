@@ -3,14 +3,16 @@
 // "start this one" action: the only way to change focus is finish or drop.
 
 import { useState } from 'react';
-import { formatHuman, formatMoney } from '../shared/format';
+import { formatHuman } from '../shared/format';
+import { calibration } from '../shared/insights';
+import { focusToday } from '../shared/record';
 import { isLocked } from '../shared/tasks';
 import type { Errors } from '../shared/validation';
 import type { Settings, Snapshot, Task } from '../shared/types';
 import { toEdit, withEdit, type DraftState } from './draft';
 import { useDeleteFlow } from './FocusTab';
 import { TaskFields, type TaskValues } from './TaskFields';
-import { Field, Icon, api } from './ui';
+import { Field, Icon, PriorityDot, api, useNow } from './ui';
 
 interface Props {
   snap: Snapshot;
@@ -19,23 +21,22 @@ interface Props {
   errors: Errors;
 }
 
-const blank = (s: Settings): TaskValues => ({
+export const blankTask = (s: Settings): TaskValues => ({
   name: '',
-  notes: '',
   finishCondition: '',
   priority: 'none',
-  value: 0,
-  valueIsEarned: false,
-  deadline: null,
   estimateMs: null,
   timer: structuredClone(s.defaultTimer),
 });
 
 export function QueueTab({ snap, draft, setDraft, errors }: Props) {
+  const now = useNow(1000);
   const [editing, setEditing] = useState<string | null>(null);
   const deletion = useDeleteFlow();
-  const active = snap.tasks.find((t) => t.status === 'active');
-  const queued = snap.tasks.filter((t) => t.status === 'queued');
+  const { tasks, settings, journal } = snap.data;
+  const active = tasks.find((t) => t.status === 'active');
+  const queued = tasks.filter((t) => t.status === 'queued');
+  const pace = calibration(journal)?.ratio ?? null;
 
   const patch = (task: Task, p: Partial<TaskValues>) =>
     setDraft((d) => ({ ...d, edits: { ...d.edits, [task.id]: { ...(d.edits[task.id] ?? toEdit(task)), ...p } } }));
@@ -49,13 +50,17 @@ export function QueueTab({ snap, draft, setDraft, errors }: Props) {
       <li key={task.id} className={`task-row${index === null ? ' pinned' : ''}${hasErr ? ' has-error' : ''}`}>
         <div className="task-row-main">
           <div className="task-row-text">
-            <div className="task-row-name">{view.name}{draft.edits[task.id] && <span className="dirty-dot" title="Unsaved edits" />}</div>
-            <div className="muted small">
-              {index === null ? 'In focus' : `#${index + 1}`}
-              {task.workMs > 0 && ` · ${formatHuman(task.workMs)} tracked`}
-              {task.droppedCount > 0 && ` · dropped ${task.droppedCount}x`}
-              {view.value > 0 && ` · ${formatMoney(view.value, snap.settings.currency)}`}
+            <div className="task-row-name">
+              <PriorityDot priority={view.priority} />
+              {view.name}
+              {draft.edits[task.id] && <span className="dirty-dot" title="Unsaved edits" />}
             </div>
+            {index !== null && (
+              <div className="muted small">
+                #{index + 1}
+                {task.droppedCount > 0 && ` · dropped ${task.droppedCount}x`}
+              </div>
+            )}
           </div>
           <div className="row-actions">
             {index !== null && (
@@ -77,6 +82,7 @@ export function QueueTab({ snap, draft, setDraft, errors }: Props) {
               prefix={`${task.id}.`}
               finishLocked={isLocked(task)}
               timerLocked={task.runtime.status === 'running'}
+              pace={pace}
             />
             <p className="muted small">Edits are saved with "Save Changes &amp; Collapse".</p>
           </div>
@@ -87,7 +93,8 @@ export function QueueTab({ snap, draft, setDraft, errors }: Props) {
 
   return (
     <section className="stack">
-      <AddTaskForm settings={snap.settings} />
+      <p className="muted small today">Today: {formatHuman(focusToday(snap.data, now))} focused</p>
+      <AddTaskForm settings={settings} pace={pace} />
       <h2 className="section-title">In focus</h2>
       <ul className="task-list">{active ? row(active, null) : <li className="muted small">Nothing in focus.</li>}</ul>
       <h2 className="section-title">Up next</h2>
@@ -97,14 +104,14 @@ export function QueueTab({ snap, draft, setDraft, errors }: Props) {
   );
 }
 
-function AddTaskForm({ settings }: { settings: Settings }) {
+function AddTaskForm({ settings, pace }: { settings: Settings; pace: number | null }) {
   const [open, setOpen] = useState(false);
-  const [v, setV] = useState<TaskValues>(() => blank(settings));
+  const [v, setV] = useState<TaskValues>(() => blankTask(settings));
   const [errors, setErrors] = useState<Errors>({});
   const submit = async () => {
     const res = await api().command({ type: 'addTask', input: v });
     if (res.ok) {
-      setV(blank(settings));
+      setV(blankTask(settings));
       setErrors({});
       setOpen(false);
     } else setErrors(res.fields ?? { name: res.error });
@@ -115,7 +122,7 @@ function AddTaskForm({ settings }: { settings: Settings }) {
   return (
     <form className="card stack" onSubmit={(e) => (e.preventDefault(), void submit())}>
       <h2 className="section-title">Add task</h2>
-      <TaskFields value={v} onChange={(p) => setV((x) => ({ ...x, ...p }))} errors={errors} prefix="" />
+      <TaskFields value={v} onChange={(p) => setV((x) => ({ ...x, ...p }))} errors={errors} prefix="" pace={pace} />
       <div className="row">
         <button className="btn primary" type="submit">Add to queue</button>
         <button className="btn ghost" type="button" onClick={() => setOpen(false)}>Cancel</button>
@@ -130,7 +137,7 @@ export function QuickAdd({ settings }: { settings: Settings }) {
   const [finish, setFinish] = useState('');
   const [errors, setErrors] = useState<Errors>({});
   const submit = async () => {
-    const res = await api().command({ type: 'addTask', input: { ...blank(settings), name, finishCondition: finish } });
+    const res = await api().command({ type: 'addTask', input: { ...blankTask(settings), name, finishCondition: finish } });
     if (!res.ok) setErrors(res.fields ?? { name: res.error });
   };
   return (
