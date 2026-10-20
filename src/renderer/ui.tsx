@@ -1,10 +1,10 @@
 // Small shared UI pieces: the API handle, a clock hook, modal, form field,
-// drag-or-click handling, inline SVG icons and the beep.
+// drag-or-click handling, theme variables, inline SVG icons and the beep.
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { MonolithApi } from '../shared/api';
 import type { TimerDisplay } from '../shared/timer';
-import type { Task } from '../shared/types';
+import type { Priority, Settings, Task } from '../shared/types';
 
 declare global {
   interface Window {
@@ -30,6 +30,28 @@ export function toneOf(task: Task, d: TimerDisplay): Tone {
   if (d.status === 'running') return task.timer.mode === 'pomodoro' && d.phase !== 'work' ? 'break' : 'running';
   if (d.status === 'paused') return 'paused';
   return 'neutral';
+}
+
+/** Theme + accent as attributes for a wrapper element; CSS variables do the rest. */
+export function themeProps(s: Settings): { 'data-theme': string; style: CSSProperties } {
+  return { 'data-theme': s.theme, style: (s.accent ? { '--accent': s.accent } : {}) as CSSProperties };
+}
+
+/** Compact card typography and background as CSS variables. */
+export function cardVars(s: Settings): CSSProperties {
+  const a = s.appearance;
+  return {
+    '--status-px': `${a.statusPx}px`,
+    '--title-px': `${a.titlePx}px`,
+    '--digits-px': `${a.digitsPx}px`,
+    '--bar-px': `${a.barPx}px`,
+    '--card-alpha': String(s.idleOpacity),
+  } as CSSProperties;
+}
+
+export function PriorityDot({ priority }: { priority: Priority }) {
+  if (priority === 'none') return null;
+  return <span className={`prio prio-${priority}`} title={`${priority[0].toUpperCase()}${priority.slice(1)} priority`} aria-label={`${priority} priority`} />;
 }
 
 export function stateLabel(d: TimerDisplay): string {
